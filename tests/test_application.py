@@ -4,6 +4,7 @@ from fakes import (
     HashingEmbedder,
     InMemoryVectorStore,
 )
+from likes_search.application.evaluate import EvalCase, evaluate
 from likes_search.application.ingest import IngestLikedVideos
 from likes_search.application.search import SearchLikedVideos
 from likes_search.domain.models import Transcript, TranscriptSegment, Video
@@ -81,3 +82,19 @@ def test_search_finds_video_without_transcript_via_metadata() -> None:
     results = SearchLikedVideos(HashingEmbedder(), store).run("lofi beats study", k=1)
     assert results[0].video_id == "music"
     assert results[0].start_seconds is None
+
+
+def test_evaluate_metrics() -> None:
+    store = InMemoryVectorStore()
+    _ingest(store).run()
+    result = evaluate(
+        SearchLikedVideos(HashingEmbedder(), store),
+        [
+            EvalCase(query="graphics card pcie", expected_video_id="gpu"),
+            EvalCase(query="parmesan pasta", expected_video_id="cook"),
+            EvalCase(query="anything", expected_video_id="does-not-exist"),
+        ],
+        k=2,
+    )
+    assert result.recall_at_k == 2 / 3
+    assert result.misses == ["anything"]
