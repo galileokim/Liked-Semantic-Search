@@ -5,6 +5,7 @@ from fakes import (
     InMemoryVectorStore,
 )
 from likes_search.application.ingest import IngestLikedVideos
+from likes_search.application.search import SearchLikedVideos
 from likes_search.domain.models import Transcript, TranscriptSegment, Video
 
 VIDEOS = [
@@ -61,3 +62,22 @@ def test_ingest_is_idempotent() -> None:
     second = _ingest(store).run()
     assert second.indexed == 0
     assert second.skipped_existing == 3
+
+
+def test_search_returns_one_result_per_video_with_deep_link() -> None:
+    store = InMemoryVectorStore()
+    _ingest(store).run()
+    results = SearchLikedVideos(HashingEmbedder(), store).run("garlic butter pasta", k=3)
+
+    assert results[0].video_id == "cook"
+    assert len({r.video_id for r in results}) == len(results)
+    assert results[0].start_seconds == 0.0
+    assert results[0].url.endswith("&t=0s")
+
+
+def test_search_finds_video_without_transcript_via_metadata() -> None:
+    store = InMemoryVectorStore()
+    _ingest(store).run()
+    results = SearchLikedVideos(HashingEmbedder(), store).run("lofi beats study", k=1)
+    assert results[0].video_id == "music"
+    assert results[0].start_seconds is None
