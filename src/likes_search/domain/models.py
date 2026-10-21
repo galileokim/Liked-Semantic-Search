@@ -69,3 +69,9 @@ class VideoMatch(_Frozen):
         if self.start_seconds is None:
             return base
         return f"{base}&t={int(self.start_seconds)}s"
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def thumbnail_url(self) -> str:
+        # YouTube serves thumbnails at a fixed URL per video; mqdefault is 320x180.
+        return f"https://i.ytimg.com/vi/{self.video_id}/mqdefault.jpg"

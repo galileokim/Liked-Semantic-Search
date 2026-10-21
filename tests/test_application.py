@@ -74,6 +74,9 @@ def test_search_returns_one_result_per_video_with_deep_link() -> None:
     assert len({r.video_id for r in results}) == len(results)
     assert results[0].start_seconds == 0.0
     assert results[0].url.endswith("&t=0s")
+    assert results[0].thumbnail_url == (
+        f"https://i.ytimg.com/vi/{results[0].video_id}/mqdefault.jpg"
+    )
 
 
 def test_search_finds_video_without_transcript_via_metadata() -> None:
