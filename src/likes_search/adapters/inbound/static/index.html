@@ -9,7 +9,9 @@
   form { display: flex; gap: .5rem; }
   input { flex: 1; padding: .6rem .8rem; font-size: 1rem; }
   button { padding: .6rem 1rem; font-size: 1rem; }
-  .r { margin: 1.25rem 0; } .r a { font-weight: 600; } .m { color: #666; font-size: .875rem; }
+  .r { display: flex; gap: 1rem; margin: 1.25rem 0; } .r a { font-weight: 600; } .m { color: #666; font-size: .875rem; }
+  .thumb { flex: none; width: 168px; aspect-ratio: 16 / 9; border-radius: 6px; background: #eee; overflow: hidden; }
+  .thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
   .s { color: #333; font-size: .9rem; }
 </style>
 </head>
@@ -28,9 +30,12 @@ f.onsubmit = async e => {
   const items = await res.json();
   out.innerHTML = items.length ? items.map(m => `
     <div class="r">
+      <a class="thumb" href="${esc(m.url)}" target="_blank" rel="noopener" tabindex="-1" aria-hidden="true"><img src="${esc(m.thumbnail_url)}" alt="" loading="lazy"></a>
+      <div>
       <a href="${esc(m.url)}" target="_blank" rel="noopener">${esc(m.title)}</a>
       <div class="m">${esc(m.channel)} · score ${m.score.toFixed(3)}${m.start_seconds != null ? " · jumps to " + Math.floor(m.start_seconds/60) + ":" + String(Math.floor(m.start_seconds%60)).padStart(2,"0") : ""}</div>
       <div class="s">${esc(m.snippet.slice(0, 240))}${m.snippet.length > 240 ? "…" : ""}</div>
+      </div>
     </div>`).join("") : "No results.";
 };
 </script>
