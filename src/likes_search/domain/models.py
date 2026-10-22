@@ -54,6 +54,13 @@ class ChunkHit(_Frozen):
     score: float  # cosine similarity; higher is better
 
 
+class MatchedMoment(_Frozen):
+    """Another passage of the same video that also ranked among the candidates."""
+
+    start_seconds: float
+    score: float
+
+
 class VideoMatch(_Frozen):
     video_id: str
     title: str
@@ -61,6 +68,11 @@ class VideoMatch(_Frozen):
     score: float
     snippet: str
     start_seconds: float | None = None
+    match_kind: ChunkKind = ChunkKind.TRANSCRIPT
+    # Evidence for "why this matched": how many of the candidate chunks came from this
+    # video, and its other matching passages (best first), beyond the one in `snippet`.
+    matched_chunks: int = 1
+    other_moments: tuple[MatchedMoment, ...] = ()
 
     @computed_field  # type: ignore[prop-decorator]
     @property
