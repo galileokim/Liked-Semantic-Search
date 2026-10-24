@@ -21,10 +21,29 @@
 
   .card { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 1.25rem; }
 
-  .layout { display: grid; gap: 1.5rem; max-width: 820px; margin: 0 auto; padding: 2rem 1.5rem 4rem; }
+  .layout { display: grid; grid-template-columns: 264px minmax(0, 1fr); gap: 1.5rem 2rem; max-width: 1120px; margin: 0 auto; padding: 2rem 1.5rem 4rem; }
   header { grid-column: 1 / -1; display: flex; justify-content: space-between; align-items: baseline; gap: 1rem; flex-wrap: wrap; }
   h1 { margin: 0; font-size: 1.5rem; letter-spacing: -.01em; }
   .index-info { color: var(--muted); font-size: .875rem; }
+
+  /* History sidebar */
+  aside { position: sticky; top: 1.5rem; align-self: start; display: flex; flex-direction: column; gap: 1rem; }
+  .side-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: .75rem; }
+  aside h2 { margin: 0; font-size: .875rem; color: var(--muted); font-weight: 600; }
+  .link-btn { background: none; border: 0; padding: 0; color: var(--accent); font: inherit; font-size: .8125rem; cursor: pointer; }
+  .link-btn:hover { text-decoration: underline; }
+  #history { list-style: none; margin: 0; padding: 0; }
+  #history { display: flex; flex-direction: column; gap: 2px; margin: 0 -.5rem; }
+  #history li { display: flex; align-items: flex-start; border-radius: 8px; }
+  #history li:hover, #history li[aria-current="true"] { background: var(--accent-soft); }
+  .h-run { flex: 1; min-width: 0; text-align: left; background: none; border: 0; padding: .55rem .5rem; color: var(--ink); font: inherit; cursor: pointer; }
+  .h-q { display: block; font-size: .9rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .h-meta { display: block; font-size: .75rem; color: var(--muted); }
+  .h-del { flex: none; background: none; border: 0; padding: .55rem .5rem; color: var(--muted); cursor: pointer; border-radius: 6px; opacity: 0; }
+  #history li:hover .h-del, .h-del:focus-visible { opacity: 1; }
+  .h-del:hover { color: var(--danger); }
+  .h-del svg { display: block; width: 14px; height: 14px; }
+  .side-empty { margin: 0; color: var(--muted); font-size: .875rem; }
 
   /* Search */
   form { display: flex; gap: .5rem; }
@@ -71,6 +90,17 @@
     <span class="index-info" id="index-info">Runs entirely on this computer</span>
   </header>
 
+  <aside aria-label="Search history">
+    <section class="card" aria-labelledby="history-title">
+    <div class="side-head">
+      <h2 id="history-title">Recent searches</h2>
+      <button type="button" class="link-btn" id="clear-history" hidden>Clear</button>
+    </div>
+    <ul id="history"></ul>
+    <p class="side-empty" id="history-empty">Your searches will show up here.</p>
+    </section>
+  </aside>
+
   <main>
     <form id="f" class="card search-card" role="search">
       <label for="q" class="sr-only">Describe the video you're looking for</label>
@@ -85,12 +115,12 @@
 </div>
 
 <script>
-const PAGE = 10, MAX_K = 50;
+const PAGE = 10, MAX_K = 50, HISTORY_KEY = "likes-search:history", HISTORY_MAX = 25;
 const STOPWORDS = new Set("a an and are as at be but by for from has have he her his how i in into is it its me my of on or our she so that the their them then there they this to was we were what when where which who why will with you your".split(" "));
 
 const $ = id => document.getElementById(id);
 const form = $("f"), input = $("q"), go = $("go"), statusEl = $("status"), notice = $("notice"),
-      list = $("results"), more = $("more");
+      list = $("results"), more = $("more"), historyEl = $("history");
 
 const esc = s => String(s).replace(/[&<>"']/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"}[c]));
 const clock = sec => {
@@ -100,6 +130,13 @@ const clock = sec => {
 const at = (videoId, sec) => `https://www.youtube.com/watch?v=${encodeURIComponent(videoId)}&t=${Math.floor(sec)}s`;
 const words = s => (s.toLowerCase().match(/[a-z0-9]+/g) || []);
 const queryTerms = q => new Set(words(q).filter(w => w.length > 1 && !STOPWORDS.has(w)));
+const ago = t => {
+  const s = (Date.now() - t) / 1000;
+  if (s < 60) return "just now";
+  if (s < 3600) return `${Math.floor(s / 60)} min ago`;
+  if (s < 86400) return `${Math.floor(s / 3600)} h ago`;
+  return `${Math.floor(s / 86400)} d ago`;
+};
 
 // Escape and highlight query terms by tokenizing the raw text, so highlighting never
 // touches the markup produced by escaping.
@@ -112,6 +149,40 @@ function trimAtWord(text, max) {
   const cut = text.slice(0, max);
   return cut.slice(0, Math.max(cut.lastIndexOf(" "), max * .8)).trimEnd() + "…";
 }
+
+// ---- History (kept in this browser only) ----
+function loadHistory() {
+  try { return JSON.parse(localStorage.getItem(HISTORY_KEY)) || []; } catch { return []; }
+}
+function saveHistory(items) {
+  try { localStorage.setItem(HISTORY_KEY, JSON.stringify(items)); } catch { /* storage unavailable */ }
+}
+function remember(q, count) {
+  const items = loadHistory().filter(h => h.q.toLowerCase() !== q.toLowerCase());
+  items.unshift({q, count, at: Date.now()});
+  saveHistory(items.slice(0, HISTORY_MAX));
+  renderHistory();
+}
+const X_ICON = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"/></svg>';
+function renderHistory() {
+  const items = loadHistory(), current = state.q.toLowerCase();
+  $("history-empty").hidden = items.length > 0;
+  $("clear-history").hidden = items.length === 0;
+  historyEl.innerHTML = items.map((h, i) => `
+    <li${h.q.toLowerCase() === current ? ' aria-current="true"' : ""}>
+      <button type="button" class="h-run" data-i="${i}">
+        <span class="h-q">${esc(h.q)}</span>
+        <span class="h-meta">${h.count} ${h.count === 1 ? "video" : "videos"} · ${ago(h.at)}</span>
+      </button>
+      <button type="button" class="h-del" data-del="${i}" aria-label="Remove “${esc(h.q)}” from history">${X_ICON}</button>
+    </li>`).join("");
+}
+historyEl.addEventListener("click", e => {
+  const run = e.target.closest(".h-run"), del = e.target.closest(".h-del"), items = loadHistory();
+  if (run) { input.value = items[run.dataset.i].q; search(input.value, PAGE, true); }
+  if (del) { items.splice(del.dataset.del, 1); saveHistory(items); renderHistory(); }
+});
+$("clear-history").addEventListener("click", () => { saveHistory([]); renderHistory(); input.focus(); });
 
 // ---- Search ----
 const state = {q: "", k: PAGE, results: []};
@@ -138,6 +209,8 @@ async function search(q, k, push) {
     Object.assign(state, {q, k, results: items});
     if (push) history.pushState({q}, "", `?q=${encodeURIComponent(q)}`);
     render(before);
+    if (!growing) remember(q, items.length);
+    else renderHistory();
   } catch (err) {
     if (err.name === "AbortError") return;
     const offline = err instanceof TypeError;
@@ -222,6 +295,7 @@ window.addEventListener("popstate", () => {
   if (q) search(q, PAGE, false);
 });
 
+renderHistory();
 const initial = new URLSearchParams(location.search).get("q");
 if (initial) { input.value = initial; search(initial, PAGE, false); }
 </script>
