@@ -7,7 +7,13 @@ from fakes import (
 from likes_search.application.evaluate import EvalCase, evaluate
 from likes_search.application.ingest import IngestLikedVideos
 from likes_search.application.search import SearchLikedVideos
-from likes_search.domain.models import Transcript, TranscriptSegment, Video
+from likes_search.domain.models import (
+    Chunk,
+    ChunkKind,
+    Transcript,
+    TranscriptSegment,
+    Video,
+)
 
 VIDEOS = [
     Video(video_id="cook", title="Weeknight dinner ideas", channel="Kitchen"),
@@ -85,6 +91,30 @@ def test_search_finds_video_without_transcript_via_metadata() -> None:
     results = SearchLikedVideos(HashingEmbedder(), store).run("lofi beats study", k=1)
     assert results[0].video_id == "music"
     assert results[0].start_seconds is None
+    assert results[0].match_kind is ChunkKind.METADATA
+
+
+def test_search_explains_match_with_other_moments() -> None:
+    store = InMemoryVectorStore()
+    chunks = [
+        Chunk(chunk_id=f"v:t{i}", video_id="v", title="Talk", channel="Ch",
+              kind=ChunkKind.TRANSCRIPT, text=text, start_seconds=start)
+        for i, (text, start) in enumerate(
+            [("attention heads explained", 10.0), ("more attention heads", 95.0),
+             ("attention again", 300.0), ("unrelated cooking", 400.0)]
+        )
+    ]
+    embedder = HashingEmbedder()
+    store.upsert(chunks, embedder.embed_documents([c.text for c in chunks]))
+
+    [match] = SearchLikedVideos(embedder, store).run("attention heads explained", k=1)
+
+    assert match.match_kind is ChunkKind.TRANSCRIPT
+    assert match.start_seconds == 10.0
+    assert match.matched_chunks == 4
+    assert [o.start_seconds for o in match.other_moments] == [95.0, 300.0, 400.0]
+    scores = [o.score for o in match.other_moments]
+    assert scores == sorted(scores, reverse=True) and all(s <= match.score for s in scores)
 
 
 def test_evaluate_metrics() -> None:
