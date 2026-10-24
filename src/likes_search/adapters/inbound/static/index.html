@@ -5,39 +5,225 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Liked Videos Search</title>
 <style>
-  body { font: 16px/1.5 system-ui, sans-serif; max-width: 760px; margin: 2rem auto; padding: 0 1rem; }
+  :root {
+    --bg: #f1f2f4; --surface: #ffffff; --ink: #1d1f22; --muted: #5f646b; --line: #e1e3e6;
+    --accent: #2457c5; --accent-soft: #e8eefb; --on-accent: #ffffff; --mark: #fff0a8; --danger: #b3261e;
+    /* Library breakdown, fixed order (validated for colour-vision deficiency). */
+    --s-transcript: #2a78d6; --s-meta: #1baf7a; --s-blocked: #eda100; --s-failed: #6250d6;
+  }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  ::selection { background: var(--accent-soft); }
+  a { color: var(--accent); text-underline-offset: .18em; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+  .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 1.25rem; }
+
+  .layout { display: grid; gap: 1.5rem; max-width: 820px; margin: 0 auto; padding: 2rem 1.5rem 4rem; }
+  header { grid-column: 1 / -1; display: flex; justify-content: space-between; align-items: baseline; gap: 1rem; flex-wrap: wrap; }
+  h1 { margin: 0; font-size: 1.5rem; letter-spacing: -.01em; }
+  .index-info { color: var(--muted); font-size: .875rem; }
+
+  /* Search */
   form { display: flex; gap: .5rem; }
-  input { flex: 1; padding: .6rem .8rem; font-size: 1rem; }
-  button { padding: .6rem 1rem; font-size: 1rem; }
-  .r { display: flex; gap: 1rem; margin: 1.25rem 0; } .r a { font-weight: 600; } .m { color: #666; font-size: .875rem; }
-  .thumb { flex: none; width: 168px; aspect-ratio: 16 / 9; border-radius: 6px; background: #eee; overflow: hidden; }
+  .search-card { padding: 1rem; }
+  input[type="search"] { flex: 1; min-width: 0; padding: .7rem .9rem; font: inherit; color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 10px; }
+  input[type="search"]::placeholder { color: var(--muted); }
+  .btn { padding: .7rem 1.1rem; font: inherit; font-weight: 600; color: var(--on-accent); background: var(--accent); border: 0; border-radius: 10px; cursor: pointer; }
+  .btn:disabled { opacity: .6; cursor: progress; }
+  .btn-quiet { color: var(--accent); background: var(--accent-soft); }
+  #status { min-height: 1.5rem; margin: 1.25rem .25rem .75rem; color: var(--muted); font-size: .875rem; }
+  .notice { padding: 1.25rem; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); }
+  .notice.error { border-color: var(--danger); }
+  .notice p { margin: 0 0 .5rem; } .notice p:last-child { margin-bottom: 0; }
+  code { white-space: nowrap; font-size: .875em; background: var(--accent-soft); padding: .1em .35em; border-radius: 4px; }
+
+  /* Results */
+  #results { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: .875rem; }
+  .r { display: grid; grid-template-columns: 168px minmax(0, 1fr); gap: 1.25rem; padding: 1.25rem; background: var(--surface); border: 1px solid var(--line); border-radius: 14px; }
+  .thumb { display: block; width: 168px; aspect-ratio: 16 / 9; border-radius: 8px; background: var(--line); overflow: hidden; }
   .thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
-  .s { color: #333; font-size: .9rem; }
+  .r-title { font-weight: 600; font-size: 1.0625rem; line-height: 1.35; }
+  .r-meta { margin-top: .15rem; color: var(--muted); font-size: .875rem; }
+  .r-meta a { font-weight: 600; }
+  .r-snip { margin: .4rem 0 0; font-size: .9375rem; max-width: 70ch; }
+  mark { background: var(--mark); color: inherit; border-radius: 2px; padding: 0 .1em; }
+  .strength { display: flex; align-items: center; gap: .5rem; margin-top: .5rem; font-size: .8125rem; color: var(--muted); }
+  .bar { width: 96px; height: 6px; border-radius: 3px; background: var(--line); overflow: hidden; }
+  .bar span { display: block; height: 100%; background: var(--accent); }
+
+  details.why { margin-top: .5rem; font-size: .875rem; }
+  details.why summary { cursor: pointer; color: var(--accent); font-weight: 600; width: fit-content; }
+  .why ul { margin: .75rem 0 0; padding: .875rem 0 0 1.25rem; border-top: 1px solid var(--line); }
+  .why li + li { margin-top: .35rem; }
+  .why .num { font-variant-numeric: tabular-nums; }
+
+  #more { display: block; margin: 1.5rem auto 0; }
+
 </style>
 </head>
 <body>
-<h1>Search your liked videos</h1>
-<form id="f"><input id="q" placeholder="that video where a guy explains transformers with a whiteboard" autofocus><button>Search</button></form>
-<div id="out"></div>
+<div class="layout">
+  <header>
+    <h1>Search your liked videos</h1>
+    <span class="index-info" id="index-info">Runs entirely on this computer</span>
+  </header>
+
+  <main>
+    <form id="f" class="card search-card" role="search">
+      <label for="q" class="sr-only">Describe the video you're looking for</label>
+      <input id="q" type="search" autocomplete="off" placeholder="that video where a guy explains transformers with a whiteboard" autofocus>
+      <button class="btn" id="go">Search</button>
+    </form>
+    <p id="status" role="status" aria-live="polite"></p>
+    <div id="notice"></div>
+    <ol id="results"></ol>
+    <button type="button" class="btn btn-quiet" id="more" hidden>Show 10 more</button>
+  </main>
+</div>
+
 <script>
-const f = document.getElementById("f"), q = document.getElementById("q"), out = document.getElementById("out");
-const esc = s => s.replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
-f.onsubmit = async e => {
-  e.preventDefault();
-  if (!q.value.trim()) return;
-  out.textContent = "Searching…";
-  const res = await fetch("/api/search?k=10&q=" + encodeURIComponent(q.value));
-  const items = await res.json();
-  out.innerHTML = items.length ? items.map(m => `
-    <div class="r">
-      <a class="thumb" href="${esc(m.url)}" target="_blank" rel="noopener" tabindex="-1" aria-hidden="true"><img src="${esc(m.thumbnail_url)}" alt="" loading="lazy"></a>
-      <div>
-      <a href="${esc(m.url)}" target="_blank" rel="noopener">${esc(m.title)}</a>
-      <div class="m">${esc(m.channel)} · score ${m.score.toFixed(3)}${m.start_seconds != null ? " · jumps to " + Math.floor(m.start_seconds/60) + ":" + String(Math.floor(m.start_seconds%60)).padStart(2,"0") : ""}</div>
-      <div class="s">${esc(m.snippet.slice(0, 240))}${m.snippet.length > 240 ? "…" : ""}</div>
-      </div>
-    </div>`).join("") : "No results.";
+const PAGE = 10, MAX_K = 50;
+const STOPWORDS = new Set("a an and are as at be but by for from has have he her his how i in into is it its me my of on or our she so that the their them then there they this to was we were what when where which who why will with you your".split(" "));
+
+const $ = id => document.getElementById(id);
+const form = $("f"), input = $("q"), go = $("go"), statusEl = $("status"), notice = $("notice"),
+      list = $("results"), more = $("more");
+
+const esc = s => String(s).replace(/[&<>"']/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"}[c]));
+const clock = sec => {
+  const s = Math.floor(sec), h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), r = String(s % 60).padStart(2, "0");
+  return h ? `${h}:${String(m).padStart(2, "0")}:${r}` : `${m}:${r}`;
 };
+const at = (videoId, sec) => `https://www.youtube.com/watch?v=${encodeURIComponent(videoId)}&t=${Math.floor(sec)}s`;
+const words = s => (s.toLowerCase().match(/[a-z0-9]+/g) || []);
+const queryTerms = q => new Set(words(q).filter(w => w.length > 1 && !STOPWORDS.has(w)));
+
+// Escape and highlight query terms by tokenizing the raw text, so highlighting never
+// touches the markup produced by escaping.
+function highlight(text, terms) {
+  return text.split(/([A-Za-z0-9]+)/).map((tok, i) =>
+    i % 2 && terms.has(tok.toLowerCase()) ? `<mark>${esc(tok)}</mark>` : esc(tok)).join("");
+}
+function trimAtWord(text, max) {
+  if (text.length <= max) return text;
+  const cut = text.slice(0, max);
+  return cut.slice(0, Math.max(cut.lastIndexOf(" "), max * .8)).trimEnd() + "…";
+}
+
+// ---- Search ----
+const state = {q: "", k: PAGE, results: []};
+let inflight = null;
+
+async function search(q, k, push) {
+  q = q.trim();
+  if (!q) { input.focus(); return; }
+  inflight?.abort();
+  const ctrl = inflight = new AbortController();
+  const growing = q === state.q && k > state.k;
+  go.disabled = more.disabled = true;
+  statusEl.textContent = growing ? "Loading more…" : "Searching…";
+  const slow = setTimeout(() => {
+    statusEl.textContent = "Still searching. The first search after starting the server loads the model, which takes a few seconds.";
+  }, 2000);
+  if (!growing) notice.innerHTML = "";
+
+  try {
+    const res = await fetch(`/api/search?k=${k}&q=${encodeURIComponent(q)}`, {signal: ctrl.signal});
+    if (!res.ok) throw new Error(`server error ${res.status}`);
+    const items = await res.json();
+    const before = growing ? state.results.length : 0;
+    Object.assign(state, {q, k, results: items});
+    if (push) history.pushState({q}, "", `?q=${encodeURIComponent(q)}`);
+    render(before);
+  } catch (err) {
+    if (err.name === "AbortError") return;
+    const offline = err instanceof TypeError;
+    statusEl.textContent = "";
+    notice.innerHTML = `<div class="notice error"><p>${offline
+      ? "Can't reach the search server. Is <code>likes serve</code> still running?"
+      : `The search failed (${esc(err.message)}). Check the terminal running <code>likes serve</code> for details.`}</p>
+      <p><button type="button" class="btn btn-quiet" id="retry">Try again</button></p></div>`;
+    $("retry").onclick = () => search(q, k, false);
+  } finally {
+    clearTimeout(slow);
+    if (inflight === ctrl) { go.disabled = more.disabled = false; inflight = null; }
+  }
+}
+
+function render(firstNew) {
+  const {q, k, results} = state;
+  const terms = queryTerms(q), top = results[0]?.score ?? 0;
+  more.hidden = results.length < k || k >= MAX_K;
+
+  if (!results.length) {
+    list.innerHTML = "";
+    statusEl.textContent = "No matches.";
+    notice.innerHTML = `<div class="notice"><p>No liked videos matched “${esc(q)}”.</p><p>Try describing what happens in the video or what someone says, rather than its exact title.</p></div>`;
+    return;
+  }
+
+  statusEl.textContent = `Showing ${results.length} ${results.length === 1 ? "video" : "videos"}, best match first` +
+    (results.length < k && k > PAGE ? ". That's every match." : k >= MAX_K ? `. ${MAX_K} is the most shown at once.` : ".");
+  list.innerHTML = results.map((m, i) => resultHtml(m, i, results.length, top, terms)).join("");
+  if (firstNew > 0) list.children[firstNew]?.querySelector(".r-title")?.focus();
+}
+
+function resultHtml(m, i, total, top, terms) {
+  const transcript = m.match_kind === "transcript" && m.start_seconds != null;
+  // A metadata chunk starts with the title and a "Channel:" line, which the result
+  // already shows; keep only the tags and description.
+  const snippet = transcript ? m.snippet : m.snippet.split("\n")
+    .filter((line, i) => !(i === 0 && line === m.title) && !line.startsWith("Channel: "))
+    .join(" · ").trim();
+  const shared = [...new Set(words(m.title + " " + m.snippet))].filter(w => terms.has(w));
+  const rel = top > 0 ? Math.max(0, Math.min(1, m.score / top)) : 0;
+  const gap = top - m.score;
+  const others = m.other_moments.map(o =>
+    `<a href="${esc(at(m.video_id, o.start_seconds))}" target="_blank" rel="noopener">${clock(o.start_seconds)}</a> <span class="num">(${o.score.toFixed(3)})</span>`);
+
+  const reasons = [
+    `Similarity <span class="num">${m.score.toFixed(3)}</span> between your search and this passage (cosine, higher is closer). ` +
+      (i === 0 ? "This is the closest match." : `Ranked ${i + 1} of ${total}, <span class="num">${gap.toFixed(3)}</span> below the top result.`),
+    transcript
+      ? `Matched something said in the video at <a href="${esc(m.url)}" target="_blank" rel="noopener">${clock(m.start_seconds)}</a>.`
+      : "Matched the video's title, channel, tags and description. No spoken passage scored higher.",
+    shared.length
+      ? `Shares these words with your search: ${shared.map(w => `<mark>${esc(w)}</mark>`).join(", ")}.`
+      : "Shares no words with your search, so it matched on meaning alone.",
+  ];
+  if (m.matched_chunks > 1) reasons.push(`${m.matched_chunks} parts of this video were among the closest candidates.`);
+  if (others.length) reasons.push(`Other matching moments: ${others.join(", ")}.`);
+
+  return `<li class="r">
+    <a class="thumb" href="${esc(m.url)}" target="_blank" rel="noopener" tabindex="-1" aria-hidden="true">
+      <img src="${esc(m.thumbnail_url)}" alt="" loading="lazy" onerror="this.remove()"></a>
+    <div>
+      <a class="r-title" href="${esc(m.url)}" target="_blank" rel="noopener">${esc(m.title)}</a>
+      <div class="r-meta">${esc(m.channel)} · ${transcript
+        ? `<a href="${esc(m.url)}" target="_blank" rel="noopener">Jump to ${clock(m.start_seconds)}</a>`
+        : "Matched title and description"}</div>
+      ${snippet ? `<p class="r-snip">${highlight(trimAtWord(snippet, 280), terms)}</p>` : ""}
+      <div class="strength"><span class="bar" aria-hidden="true"><span style="width:${Math.round(rel * 100)}%"></span></span>
+        ${i === 0 ? "Best match" : `${Math.round(rel * 100)}% of the best match's score`}</div>
+      <details class="why"><summary>Why this match</summary><ul>${reasons.map(r => `<li>${r}</li>`).join("")}</ul></details>
+    </div>
+  </li>`;
+}
+
+form.addEventListener("submit", e => { e.preventDefault(); search(input.value, PAGE, input.value.trim() !== state.q); });
+more.addEventListener("click", () => search(state.q, Math.min(state.k + PAGE, MAX_K), false));
+more.textContent = `Show ${PAGE} more`;
+window.addEventListener("popstate", () => {
+  const q = new URLSearchParams(location.search).get("q") || "";
+  input.value = q;
+  if (q) search(q, PAGE, false);
+});
+
+const initial = new URLSearchParams(location.search).get("q");
+if (initial) { input.value = initial; search(initial, PAGE, false); }
 </script>
 </body>
 </html>
