@@ -29,14 +29,20 @@ class FakeLikedVideoSource(LikedVideoSource):
 
 class FakeTranscriptProvider(TranscriptProvider):
     def __init__(
-        self, transcripts: dict[str, Transcript], failing: frozenset[str] = frozenset()
+        self,
+        transcripts: dict[str, Transcript],
+        failing: frozenset[str] = frozenset(),
+        blocked: frozenset[str] = frozenset(),
     ) -> None:
         self._transcripts = transcripts
         self._failing = failing
+        self._blocked = blocked
 
     def fetch(self, video_id: str) -> Transcript | None:
+        if video_id in self._blocked:
+            raise TranscriptFetchError("IpBlocked", blocked=True)
         if video_id in self._failing:
-            raise TranscriptFetchError("simulated block")
+            raise TranscriptFetchError("simulated failure")
         return self._transcripts.get(video_id)
 
 

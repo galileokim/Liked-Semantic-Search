@@ -17,7 +17,16 @@ Vector = Sequence[float]
 
 class TranscriptFetchError(Exception):
     """Transient/unexpected failure (rate limit, IP block, network). The video should be
-    retried on a later run, unlike a video that simply has no transcript."""
+    retried on a later run, unlike a video that simply has no transcript.
+
+    `blocked` marks YouTube refusing the request (IP block / bot check), as opposed to
+    any other failure.
+    """
+
+    def __init__(self, reason: str, blocked: bool = False) -> None:
+        super().__init__(reason)
+        self.reason = reason
+        self.blocked = blocked
 
 
 class LikedVideoSource(ABC):
