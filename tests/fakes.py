@@ -26,6 +26,9 @@ class FakeLikedVideoSource(LikedVideoSource):
     def iter_liked_videos(self, limit: int | None = None) -> Iterator[Video]:
         yield from self._videos[:limit]
 
+    def count_liked(self) -> int | None:
+        return len(self._videos)
+
 
 class FakeTranscriptProvider(TranscriptProvider):
     def __init__(

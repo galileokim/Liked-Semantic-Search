@@ -69,6 +69,13 @@ class YouTubeApiLikedVideoSource(LikedVideoSource):
             if not page_token:
                 return
 
+    def count_liked(self) -> int | None:
+        response: dict[str, Any] = (
+            self._youtube.videos().list(part="id", myRating="like", maxResults=1).execute()
+        )
+        total = response.get("pageInfo", {}).get("totalResults")
+        return int(total) if total is not None else None
+
 
 def _to_video(item: dict[str, Any]) -> Video:
     snippet: dict[str, Any] = item["snippet"]

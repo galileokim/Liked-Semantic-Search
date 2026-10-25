@@ -34,6 +34,10 @@ class LikedVideoSource(ABC):
     def iter_liked_videos(self, limit: int | None = None) -> Iterator[Video]:
         """Yield liked videos, most recently liked first."""
 
+    @abstractmethod
+    def count_liked(self) -> int | None:
+        """Total number of liked videos on the account, or None if unknown."""
+
 
 class IngestStateRepository(ABC):
     """Persists what the vector store can't tell us: the account's like count and the
