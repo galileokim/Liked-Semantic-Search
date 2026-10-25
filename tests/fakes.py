@@ -8,9 +8,17 @@ import math
 import re
 from collections.abc import Iterator, Sequence
 
-from likes_search.domain.models import Chunk, ChunkHit, ChunkKind, Transcript, Video
+from likes_search.domain.models import (
+    Chunk,
+    ChunkHit,
+    ChunkKind,
+    IngestState,
+    Transcript,
+    Video,
+)
 from likes_search.ports import (
     Embedder,
+    IngestStateRepository,
     LikedVideoSource,
     TranscriptFetchError,
     TranscriptProvider,
@@ -86,3 +94,14 @@ class InMemoryVectorStore(VectorStore):
 
     def indexed_video_ids(self) -> set[str]:
         return {c.video_id for c, _ in self.records.values() if c.kind is ChunkKind.METADATA}
+
+
+class InMemoryIngestStateRepository(IngestStateRepository):
+    def __init__(self) -> None:
+        self.state = IngestState()
+
+    def load(self) -> IngestState:
+        return self.state
+
+    def save(self, state: IngestState) -> None:
+        self.state = state

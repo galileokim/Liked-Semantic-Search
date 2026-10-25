@@ -2,6 +2,7 @@ from fakes import (
     FakeLikedVideoSource,
     FakeTranscriptProvider,
     HashingEmbedder,
+    InMemoryIngestStateRepository,
     InMemoryVectorStore,
 )
 from likes_search.application.evaluate import EvalCase, evaluate
@@ -43,12 +44,19 @@ TRANSCRIPTS = {
 }
 
 
-def _ingest(store: InMemoryVectorStore) -> IngestLikedVideos:
+def _ingest(
+    store: InMemoryVectorStore,
+    state: InMemoryIngestStateRepository | None = None,
+    blocked: frozenset[str] = frozenset(),
+) -> IngestLikedVideos:
     return IngestLikedVideos(
         source=FakeLikedVideoSource(VIDEOS),
-        transcripts=FakeTranscriptProvider(TRANSCRIPTS, failing=frozenset({"blocked"})),
+        transcripts=FakeTranscriptProvider(
+            TRANSCRIPTS, failing=frozenset({"blocked"}), blocked=blocked
+        ),
         embedder=HashingEmbedder(),
         store=store,
+        state=state or InMemoryIngestStateRepository(),
     )
 
 
