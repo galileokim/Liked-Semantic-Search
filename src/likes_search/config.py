@@ -28,5 +28,9 @@ class Settings(BaseSettings):
         return self.data_dir / "chroma"
 
     @property
+    def ingest_state_file(self) -> Path:
+        return self.data_dir / "ingest_state.json"
+
+    @property
     def token_file(self) -> Path:
         return self.data_dir / "token.json"

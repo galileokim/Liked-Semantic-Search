@@ -10,7 +10,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from collections.abc import Iterator, Sequence
 
-from likes_search.domain.models import Chunk, ChunkHit, Transcript, Video
+from likes_search.domain.models import Chunk, ChunkHit, IngestState, Transcript, Video
 
 Vector = Sequence[float]
 
@@ -33,6 +33,17 @@ class LikedVideoSource(ABC):
     @abstractmethod
     def iter_liked_videos(self, limit: int | None = None) -> Iterator[Video]:
         """Yield liked videos, most recently liked first."""
+
+
+class IngestStateRepository(ABC):
+    """Persists what the vector store can't tell us: the account's like count and the
+    videos whose transcript fetch failed (those are deliberately not indexed)."""
+
+    @abstractmethod
+    def load(self) -> IngestState: ...
+
+    @abstractmethod
+    def save(self, state: IngestState) -> None: ...
 
 
 class TranscriptProvider(ABC):
