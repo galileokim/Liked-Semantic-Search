@@ -54,6 +54,20 @@ class ChunkHit(_Frozen):
     score: float  # cosine similarity; higher is better
 
 
+class FailedVideo(_Frozen):
+    video_id: str
+    title: str
+    channel: str
+    reason: str
+    blocked: bool  # YouTube refused the request (IP block / bot check)
+
+
+class IngestState(_Frozen):
+    total_liked: int | None = None
+    last_run_at: datetime | None = None
+    failed: tuple[FailedVideo, ...] = ()
+
+
 class MatchedMoment(_Frozen):
     """Another passage of the same video that also ranked among the candidates."""
 
