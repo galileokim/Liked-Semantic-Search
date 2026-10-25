@@ -1,0 +1,13 @@
+.venv/
+__pycache__/
+*.pyc
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+
+# Local data: vector DB + OAuth token
+.data/
+.env
+
+# Google OAuth client secret — never commit
+client_secret*.json
