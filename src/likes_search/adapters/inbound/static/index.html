@@ -295,6 +295,10 @@ window.addEventListener("popstate", () => {
   if (q) search(q, PAGE, false);
 });
 
+document.addEventListener("keydown", e => {
+  if (e.key === "/" && document.activeElement !== input && !e.metaKey && !e.ctrlKey) { e.preventDefault(); input.focus(); input.select(); }
+});
+
 renderHistory();
 const initial = new URLSearchParams(location.search).get("q");
 if (initial) { input.value = initial; search(initial, PAGE, false); }
