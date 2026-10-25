@@ -20,6 +20,7 @@ class IngestReport:
     indexed: int = 0
     without_transcript: int = 0
     failed: list[str] = field(default_factory=list)
+    blocked: int = 0  # subset of `failed` that YouTube refused (IP block / bot check)
 
 
 class IngestLikedVideos:
@@ -61,7 +62,8 @@ class IngestLikedVideos:
             except TranscriptFetchError as e:
                 # Don't index metadata-only: leaving it out means the next run retries.
                 report.failed.append(video.video_id)
-                log(f"FAIL  {video.title} ({e})")
+                report.blocked += e.blocked
+                log(f"{'BLOCK' if e.blocked else 'FAIL '} {video.title} ({e.reason})")
                 continue
 
             if transcript is None:
