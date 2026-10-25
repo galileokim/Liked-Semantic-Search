@@ -68,6 +68,19 @@ class IngestState(_Frozen):
     failed: tuple[FailedVideo, ...] = ()
 
 
+class LibraryStatus(_Frozen):
+    """How much of the account's liked videos made it into the index."""
+
+    total_liked: int | None  # None until an ingest has recorded it
+    indexed: int
+    with_transcript: int
+    metadata_only: int  # no transcript in the configured languages
+    blocked: int
+    failed_other: int
+    not_loaded: int  # liked but not processed yet (e.g. ingest ran with --limit)
+    last_run_at: datetime | None
+
+
 class MatchedMoment(_Frozen):
     """Another passage of the same video that also ranked among the candidates."""
 
