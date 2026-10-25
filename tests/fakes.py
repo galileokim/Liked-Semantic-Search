@@ -95,6 +95,9 @@ class InMemoryVectorStore(VectorStore):
     def indexed_video_ids(self) -> set[str]:
         return {c.video_id for c, _ in self.records.values() if c.kind is ChunkKind.METADATA}
 
+    def video_ids_with_transcripts(self) -> set[str]:
+        return {c.video_id for c, _ in self.records.values() if c.kind is ChunkKind.TRANSCRIPT}
+
 
 class InMemoryIngestStateRepository(IngestStateRepository):
     def __init__(self) -> None:

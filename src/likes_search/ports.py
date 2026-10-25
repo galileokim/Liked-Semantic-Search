@@ -80,3 +80,7 @@ class VectorStore(ABC):
 
     @abstractmethod
     def indexed_video_ids(self) -> set[str]: ...
+
+    @abstractmethod
+    def video_ids_with_transcripts(self) -> set[str]:
+        """Indexed videos that have at least one transcript chunk."""
