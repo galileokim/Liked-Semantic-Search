@@ -27,7 +27,8 @@ def ingest(
     typer.echo(
         f"\nseen={report.seen} indexed={report.indexed} "
         f"skipped_existing={report.skipped_existing} "
-        f"no_transcript={report.without_transcript} failed={len(report.failed)}"
+        f"no_transcript={report.without_transcript} failed={len(report.failed)} "
+        f"(blocked={report.blocked})"
     )
     if report.failed:
         typer.echo("Failed videos will be retried on the next run.")
