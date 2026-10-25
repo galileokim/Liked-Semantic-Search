@@ -17,6 +17,7 @@ from likes_search.adapters.outbound.youtube_api import (
     load_credentials,
 )
 from likes_search.application.ingest import IngestLikedVideos
+from likes_search.application.library import GetLibraryStatus
 from likes_search.application.search import SearchLikedVideos
 from likes_search.config import Settings
 from likes_search.domain.chunking import ChunkingConfig
@@ -63,3 +64,6 @@ class Container:
 
     def search(self) -> SearchLikedVideos:
         return SearchLikedVideos(self.embedder, self.store)
+
+    def library_status(self) -> GetLibraryStatus:
+        return GetLibraryStatus(self.store, self.ingest_state)
