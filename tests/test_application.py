@@ -12,6 +12,7 @@ from likes_search.application.search import SearchLikedVideos
 from likes_search.domain.models import (
     Chunk,
     ChunkKind,
+    MusicFilter,
     Transcript,
     TranscriptSegment,
     Video,
@@ -155,6 +156,26 @@ def test_search_explains_match_with_other_moments() -> None:
     assert [o.start_seconds for o in match.other_moments] == [95.0, 300.0, 400.0]
     scores = [o.score for o in match.other_moments]
     assert scores == sorted(scores, reverse=True) and all(s <= match.score for s in scores)
+
+
+def test_search_music_filter() -> None:
+    store = InMemoryVectorStore()
+    embedder = HashingEmbedder()
+    chunks = [
+        Chunk(chunk_id=f"{vid}:meta", video_id=vid, title=title, channel=channel,
+              kind=ChunkKind.METADATA, text=f"{title} {channel}")
+        for vid, title, channel in [
+            ("song", "Rainy night piano", "Some Artist - Topic"),
+            ("talk", "Rainy night photography tips", "Photo Club"),
+        ]
+    ]
+    store.upsert(chunks, embedder.embed_documents([c.text for c in chunks]))
+    search = SearchLikedVideos(embedder, store)
+
+    assert {m.video_id for m in search.run("rainy night")} == {"song", "talk"}
+    assert [m.video_id for m in search.run("rainy night", music=MusicFilter.EXCLUDE)] == ["talk"]
+    only = search.run("rainy night", music=MusicFilter.ONLY)
+    assert [m.video_id for m in only] == ["song"] and only[0].is_music
 
 
 def test_evaluate_metrics() -> None:
