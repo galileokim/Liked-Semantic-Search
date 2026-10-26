@@ -130,6 +130,20 @@
 
   #more { display: block; margin: 1.5rem auto 0; }
 
+  @media (max-width: 760px) {
+    .layout { grid-template-columns: minmax(0, 1fr); gap: 1rem; padding: 1.25rem 1rem 3rem; }
+    .card { padding: 1rem; }
+    form { flex-wrap: wrap; }
+    input[type="search"] { flex: 1 1 100%; }
+    form .btn { flex: 1; justify-content: center; }
+    aside { position: static; order: 2; }
+    main { order: 1; }
+    #history { flex-direction: row; gap: .5rem; overflow-x: auto; margin: 0; padding-bottom: .25rem; }
+    #history li { flex: none; max-width: 70vw; border: 1px solid var(--line); }
+    .h-del { opacity: 1; }
+    .r { grid-template-columns: 112px minmax(0, 1fr); gap: .875rem; padding: 1rem; }
+    .thumb { width: 112px; }
+  }
 </style>
 </head>
 <body>
