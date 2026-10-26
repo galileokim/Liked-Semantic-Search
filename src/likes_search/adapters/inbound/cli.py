@@ -7,6 +7,7 @@ import typer
 
 from likes_search.application.evaluate import evaluate, load_cases
 from likes_search.bootstrap import Container
+from likes_search.domain.models import MusicFilter
 
 app = typer.Typer(help="Semantic search over your YouTube liked videos.", no_args_is_help=True)
 
@@ -38,9 +39,12 @@ def ingest(
 def search(
     query: str,
     k: Annotated[int, typer.Option("-k", help="Number of videos to return.")] = 10,
+    music: Annotated[
+        MusicFilter, typer.Option(help="Include, exclude, or show only music.")
+    ] = MusicFilter.INCLUDE,
 ) -> None:
     """Search your liked videos by meaning."""
-    for i, m in enumerate(Container().search().run(query, k), start=1):
+    for i, m in enumerate(Container().search().run(query, k, music), start=1):
         snippet = m.snippet.replace("\n", " ")
         typer.echo(f"{i:>2}. [{m.score:.3f}] {m.title} — {m.channel}")
         typer.echo(f"    {m.url}")

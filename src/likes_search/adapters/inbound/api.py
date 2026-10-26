@@ -7,7 +7,7 @@ from fastapi import FastAPI, Query
 from fastapi.responses import HTMLResponse
 
 from likes_search.bootstrap import Container
-from likes_search.domain.models import LibraryStatus, VideoMatch
+from likes_search.domain.models import LibraryStatus, MusicFilter, VideoMatch
 
 _STATIC = resources.files("likes_search.adapters.inbound").joinpath("static")
 _INDEX_HTML = _STATIC.joinpath("index.html").read_text()
@@ -23,13 +23,14 @@ def create_app(container: Container, live_html: bool = False) -> FastAPI:
     def search_endpoint(
         q: Annotated[str, Query(min_length=1)],
         k: Annotated[int, Query(ge=1, le=50)] = 10,
+        music: MusicFilter = MusicFilter.INCLUDE,
     ) -> list[VideoMatch]:
-        return search.run(q, k)
+        return search.run(q, k, music)
 
     @app.get("/api/status")
-    def status_endpoint() -> LibraryStatus:
+    def status_endpoint(music: MusicFilter = MusicFilter.INCLUDE) -> LibraryStatus:
         # Also lets the UI tell "nothing matched" apart from "nothing ingested yet".
-        return library_status.run()
+        return library_status.run(music)
 
     @app.get("/", response_class=HTMLResponse)
     def index() -> str:
