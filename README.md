@@ -4,6 +4,17 @@ Semantic search over your YouTube liked videos — find "that video where someon
 X" when you don't remember the title. Results deep-link to the moment in the video where
 the matching transcript passage starts.
 
+<table>
+  <tr>
+    <td width="50%"><img alt="Liked Videos Search" src="https://github.com/user-attachments/assets/a81e4af0-dde4-4e01-bf7b-4e3c1e89687e" /></td>
+    <td width="50%"><img alt="Screenshot 2" src="https://github.com/user-attachments/assets/0562d6b3-3f7f-4263-8b6c-7dd6c333e31a" /></td>
+  </tr>
+  <tr>
+    <td width="50%"><img alt="Screenshot 3" src="https://github.com/user-attachments/assets/38eacf83-43f3-4604-904b-8a07fe28eed9" /></td>
+    <td width="50%"><img alt="Screenshot 4" src="https://github.com/user-attachments/assets/cfc73052-28e4-4836-8c78-d1d8404262d9" /></td>
+  </tr>
+</table>
+
 ## How it works
 
 ```
