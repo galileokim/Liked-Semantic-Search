@@ -82,5 +82,9 @@ class VectorStore(ABC):
     def indexed_video_ids(self) -> set[str]: ...
 
     @abstractmethod
+    def indexed_video_channels(self) -> dict[str, str]:
+        """Channel name of every indexed video, by video id."""
+
+    @abstractmethod
     def video_ids_with_transcripts(self) -> set[str]:
         """Indexed videos that have at least one transcript chunk."""

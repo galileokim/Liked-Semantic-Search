@@ -86,9 +86,11 @@ class IngestState(_Frozen):
 
 
 class LibraryStatus(_Frozen):
-    """How much of the account's liked videos made it into the index."""
+    """How much of the account's liked videos made it into the index, optionally
+    narrowed by the music filter."""
 
-    total_liked: int | None  # None until an ingest has recorded it
+    music: MusicFilter
+    total_liked: int | None  # None until an ingest has recorded it, or when filtered
     indexed: int
     with_transcript: int
     metadata_only: int  # no transcript in the configured languages

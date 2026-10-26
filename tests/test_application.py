@@ -97,6 +97,29 @@ def test_ingest_records_failures_and_library_status() -> None:
     assert [f.video_id for f in state.state.failed] == ["blocked"]
 
 
+def test_library_status_follows_music_filter() -> None:
+    store, state = InMemoryVectorStore(), InMemoryIngestStateRepository()
+    songs = [Video(video_id="s1", title="Song", channel="Band - Topic")]
+    IngestLikedVideos(
+        source=FakeLikedVideoSource([*VIDEOS, *songs]),
+        transcripts=FakeTranscriptProvider(TRANSCRIPTS, blocked=frozenset({"gpu"})),
+        embedder=HashingEmbedder(),
+        store=store,
+        state=state,
+    ).run()
+    library = GetLibraryStatus(store, state)
+
+    everything = library.run()
+    assert (everything.total_liked, everything.indexed, everything.blocked) == (5, 4, 1)
+
+    only = library.run(MusicFilter.ONLY)
+    assert (only.total_liked, only.indexed, only.metadata_only, only.blocked) == (None, 1, 1, 0)
+
+    hidden = library.run(MusicFilter.EXCLUDE)
+    assert (hidden.indexed, hidden.with_transcript, hidden.blocked) == (3, 1, 1)
+    assert hidden.total_liked is None and hidden.not_loaded == 0
+
+
 def test_library_status_counts_unprocessed_likes() -> None:
     store, state = InMemoryVectorStore(), InMemoryIngestStateRepository()
     _ingest(store, state).run(limit=1)
