@@ -60,9 +60,29 @@ def eval_cmd(
 
 
 @app.command()
-def serve(host: str = "127.0.0.1", port: int = 8000) -> None:
+def serve(
+    host: str = "127.0.0.1",
+    port: int = 8000,
+    reload: Annotated[
+        bool, typer.Option(help="Restart on Python changes; serve HTML edits on refresh.")
+    ] = False,
+) -> None:
     """Start the web UI + JSON API."""
     import uvicorn
+
+    if reload:
+        import likes_search
+
+        uvicorn.run(
+            "likes_search.adapters.inbound.api:create_dev_app",
+            factory=True,
+            host=host,
+            port=port,
+            reload=True,
+            reload_dirs=[str(Path(likes_search.__file__).parent)],
+            log_level="debug",
+        )
+        return
 
     from likes_search.adapters.inbound.api import create_app
 

@@ -13,7 +13,8 @@ _STATIC = resources.files("likes_search.adapters.inbound").joinpath("static")
 _INDEX_HTML = _STATIC.joinpath("index.html").read_text()
 
 
-def create_app(container: Container) -> FastAPI:
+def create_app(container: Container, live_html: bool = False) -> FastAPI:
+    """`live_html` re-reads the page on every request, so edits show on refresh."""
     app = FastAPI(title="Liked Videos Search")
     search = container.search()
     library_status = container.library_status()
@@ -32,6 +33,12 @@ def create_app(container: Container) -> FastAPI:
 
     @app.get("/", response_class=HTMLResponse)
     def index() -> str:
-        return _INDEX_HTML
+        return _STATIC.joinpath("index.html").read_text() if live_html else _INDEX_HTML
 
     return app
+
+
+def create_dev_app() -> FastAPI:
+    """Zero-argument factory for `likes serve --reload`: uvicorn's reloader re-imports
+    the app by name in a fresh process on each Python change."""
+    return create_app(Container(), live_html=True)

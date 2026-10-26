@@ -55,6 +55,7 @@ uv run likes auth                      # browser consent, caches token in .data/
 uv run likes ingest --limit 50         # start small; re-run anytime to add new likes
 uv run likes search "guy explains attention with a whiteboard"
 uv run likes serve                     # web UI at http://127.0.0.1:8000
+uv run likes serve --reload            # dev: restarts on Python changes, HTML edits show on refresh
 ```
 
 ### Evaluating retrieval quality
