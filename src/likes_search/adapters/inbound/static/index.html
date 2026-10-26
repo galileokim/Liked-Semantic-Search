@@ -51,13 +51,27 @@
   .index-info { color: var(--muted); font-size: .875rem; }
   .head-right { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; }
 
-  /* Segmented control (theme switch): a radio group */
+  /* Segmented control (theme switch, music filter): a radio group */
   .seg { display: inline-flex; gap: 2px; margin: 0; min-width: 0; padding: 4px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
   .seg legend { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
   .seg label { position: relative; padding: .3rem .7rem; font-size: .8125rem; color: var(--muted); border-radius: 6px; cursor: pointer; }
   .seg input { position: absolute; opacity: 0; inset: 0; margin: 0; cursor: pointer; }
   .seg label:has(input:checked) { background: var(--accent-soft); color: var(--ink); font-weight: 600; }
   .seg label:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+  /* Filter button + popover */
+  .filter-btn { display: inline-flex; align-items: center; gap: .45rem; white-space: nowrap; }
+  .filter-btn svg { width: 16px; height: 16px; flex: none; }
+  .filter-btn[data-active] { box-shadow: inset 0 0 0 1.5px var(--accent); }
+  .pop { position: fixed; inset: auto; margin: 0; width: min(300px, calc(100vw - 16px)); padding: 1rem; color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 12px 32px rgba(0, 0, 0, .14), 0 2px 6px rgba(0, 0, 0, .08); }
+  .choices { margin: 0; padding: 0; border: 0; min-width: 0; }
+  .choices legend { padding: 0 0 .4rem; font-size: .8125rem; font-weight: 600; color: var(--muted); }
+  .choices label { display: flex; gap: .65rem; align-items: flex-start; padding: .5rem .6rem; margin: 0 -.6rem; border-radius: 8px; cursor: pointer; font-size: .9375rem; }
+  .choices label:hover, .choices label:has(input:checked) { background: var(--accent-soft); }
+  .choices input { margin: .3rem 0 0; accent-color: var(--accent); }
+  .choices small { display: block; color: var(--muted); font-size: .8125rem; }
+  .pop-note { margin: .75rem 0 0; font-size: .75rem; color: var(--muted); }
+  .tag { display: inline-block; padding: 0 .45rem; font-size: .75rem; font-weight: 600; border-radius: 999px; background: var(--accent-soft); color: var(--ink); }
 
   /* History sidebar */
   aside { position: sticky; top: 1.5rem; align-self: start; display: flex; flex-direction: column; gap: 1rem; }
@@ -181,7 +195,20 @@
       <label for="q" class="sr-only">Describe the video you're looking for</label>
       <input id="q" type="search" autocomplete="off" placeholder="that video where a guy explains transformers with a whiteboard" autofocus>
       <button class="btn" id="go">Search</button>
+      <button type="button" class="btn btn-quiet filter-btn" id="filter-btn" popovertarget="filter-pop">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 3.5h12M4.5 8h7M7 12.5h2" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" fill="none"/></svg>
+        <span id="filter-label">Filter</span>
+      </button>
     </form>
+    <div id="filter-pop" class="pop" popover>
+      <fieldset class="choices" id="music">
+        <legend>Music</legend>
+        <label><input type="radio" name="music" value="include"><span>Show music<small>Search everything you've liked</small></span></label>
+        <label><input type="radio" name="music" value="exclude"><span>Hide music<small>Leave songs out of results and counts</small></span></label>
+        <label><input type="radio" name="music" value="only"><span>Only music<small>Just your liked songs</small></span></label>
+      </fieldset>
+      <p class="pop-note">Songs are videos from YouTube's auto-generated “Artist - Topic” channels.</p>
+    </div>
     <p id="status" role="status" aria-live="polite"></p>
     <div id="notice"></div>
     <ol id="results"></ol>
@@ -260,15 +287,20 @@ historyEl.addEventListener("click", e => {
 $("clear-history").addEventListener("click", () => { saveHistory([]); renderHistory(); input.focus(); });
 
 // ---- Search ----
-const state = {q: "", k: PAGE, results: []};
+// Music = songs from YouTube's auto-generated "Artist - Topic" channels.
+const MUSIC_KEY = "likes-search:music", MUSIC_VALUES = ["include", "exclude", "only"];
+const savedMusic = (() => { try { return localStorage.getItem(MUSIC_KEY); } catch { return null; } })();
+const urlMusic = new URLSearchParams(location.search).get("music");
+const state = {q: "", k: PAGE, results: [], music: MUSIC_VALUES.find(v => v === (urlMusic || savedMusic)) || "include"};
+const searchUrl = (q, music) => `?q=${encodeURIComponent(q)}` + (music === "include" ? "" : `&music=${music}`);
 let inflight = null;
 
-async function search(q, k, push) {
+async function search(q, k, push, music = state.music) {
   q = q.trim();
   if (!q) { input.focus(); return; }
   inflight?.abort();
   const ctrl = inflight = new AbortController();
-  const growing = q === state.q && k > state.k;
+  const growing = q === state.q && music === state.music && k > state.k;
   go.disabled = more.disabled = true;
   statusEl.textContent = growing ? "Loading more…" : "Searching…";
   const slow = setTimeout(() => {
@@ -277,12 +309,12 @@ async function search(q, k, push) {
   if (!growing) notice.innerHTML = "";
 
   try {
-    const res = await fetch(`/api/search?k=${k}&q=${encodeURIComponent(q)}`, {signal: ctrl.signal});
+    const res = await fetch(`/api/search?k=${k}&q=${encodeURIComponent(q)}&music=${music}`, {signal: ctrl.signal});
     if (!res.ok) throw new Error(`server error ${res.status}`);
     const items = await res.json();
     const before = growing ? state.results.length : 0;
-    Object.assign(state, {q, k, results: items});
-    if (push) history.pushState({q}, "", `?q=${encodeURIComponent(q)}`);
+    Object.assign(state, {q, k, results: items, music});
+    if (push) history.pushState({q}, "", searchUrl(q, music));
     render(before);
     if (!growing) remember(q, items.length);
     else renderHistory();
@@ -294,7 +326,7 @@ async function search(q, k, push) {
       ? "Can't reach the search server. Is <code>likes serve</code> still running?"
       : `The search failed (${esc(err.message)}). Check the terminal running <code>likes serve</code> for details.`}</p>
       <p><button type="button" class="btn btn-quiet" id="retry">Try again</button></p></div>`;
-    $("retry").onclick = () => search(q, k, false);
+    $("retry").onclick = () => search(q, k, false, music);
   } finally {
     clearTimeout(slow);
     if (inflight === ctrl) { go.disabled = more.disabled = false; inflight = null; }
@@ -312,11 +344,14 @@ function render(firstNew) {
     const empty = indexCount === 0;
     notice.innerHTML = `<div class="notice">${empty
       ? "<p>Your index is empty, so there's nothing to search yet.</p><p>Run <code>likes ingest</code> in a terminal to add your liked videos, then search again.</p>"
-      : `<p>No liked videos matched “${esc(q)}”.</p><p>Try describing what happens in the video or what someone says, rather than its exact title.</p>`}</div>`;
+      : state.music === "only"
+        ? `<p>No music matched “${esc(q)}”.</p><p>Only songs from auto-generated “Artist - Topic” channels count as music. Set Music to Show to search everything.</p>`
+        : `<p>No liked videos matched “${esc(q)}”${state.music === "exclude" ? " with music hidden" : ""}.</p><p>Try describing what happens in the video or what someone says, rather than its exact title.</p>`}</div>`;
     return;
   }
 
-  statusEl.textContent = `Showing ${results.length} ${results.length === 1 ? "video" : "videos"}, best match first` +
+  const scope = {include: "", exclude: " (music hidden)", only: " (music only)"}[state.music];
+  statusEl.textContent = `Showing ${results.length} ${results.length === 1 ? (state.music === "only" ? "song" : "video") : (state.music === "only" ? "songs" : "videos")}${scope}, best match first` +
     (results.length < k && k > PAGE ? ". That's every match." : k >= MAX_K ? `. ${MAX_K} is the most shown at once.` : ".");
   list.innerHTML = results.map((m, i) => resultHtml(m, i, results.length, top, terms)).join("");
   if (firstNew > 0) list.children[firstNew]?.querySelector(".r-title")?.focus();
@@ -353,7 +388,7 @@ function resultHtml(m, i, total, top, terms) {
       <img src="${esc(m.thumbnail_url)}" alt="" loading="lazy" onerror="this.remove()"></a>
     <div>
       <a class="r-title" href="${esc(m.url)}" target="_blank" rel="noopener">${esc(m.title)}</a>
-      <div class="r-meta">${esc(m.channel)} · ${transcript
+      <div class="r-meta">${m.is_music ? '<span class="tag">Music</span> ' : ""}${esc(m.channel)} · ${transcript
         ? `<a href="${esc(m.url)}" target="_blank" rel="noopener">Jump to ${clock(m.start_seconds)}</a>`
         : "Matched title and description"}</div>
       ${snippet ? `<p class="r-snip">${highlight(trimAtWord(snippet, 280), terms)}</p>` : ""}
@@ -368,24 +403,61 @@ form.addEventListener("submit", e => { e.preventDefault(); search(input.value, P
 more.addEventListener("click", () => search(state.q, Math.min(state.k + PAGE, MAX_K), false));
 more.textContent = `Show ${PAGE} more`;
 window.addEventListener("popstate", () => {
-  const q = new URLSearchParams(location.search).get("q") || "";
+  const params = new URLSearchParams(location.search);
+  const q = params.get("q") || "", music = MUSIC_VALUES.find(v => v === params.get("music")) || "include";
   input.value = q;
-  if (q) search(q, PAGE, false);
+  setMusicControl(music);
+  if (q) search(q, PAGE, false, music);
 });
 
+// ---- Music filter (in the Filter popover) ----
+const filterBtn = $("filter-btn"), filterPop = $("filter-pop");
+function setMusicControl(value) {
+  document.querySelector(`#music input[value="${value}"]`).checked = true;
+  $("filter-label").textContent = {include: "Filter", exclude: "Music hidden", only: "Only music"}[value];
+  filterBtn.toggleAttribute("data-active", value !== "include");
+  loadLibrary(value);
+}
+$("music").addEventListener("change", e => {
+  const music = e.target.value;
+  try { localStorage.setItem(MUSIC_KEY, music); } catch { /* not saved */ }
+  setMusicControl(music);
+  filterPop.hidePopover();
+  if (state.q) {
+    history.replaceState({q: state.q}, "", searchUrl(state.q, music));
+    search(state.q, PAGE, false, music);
+  } else {
+    state.music = music;
+  }
+});
+
+// Anchor the popover under the button, right-aligned, kept on screen.
+function placeFilterPop() {
+  const r = filterBtn.getBoundingClientRect(), w = Math.min(300, innerWidth - 16);
+  filterPop.style.top = `${r.bottom + 6}px`;
+  filterPop.style.left = `${Math.max(8, Math.min(r.right - w, innerWidth - w - 8))}px`;
+}
+filterPop.addEventListener("beforetoggle", e => { if (e.newState === "open") placeFilterPop(); });
+addEventListener("resize", () => filterPop.matches(":popover-open") && placeFilterPop());
+addEventListener("scroll", () => filterPop.matches(":popover-open") && placeFilterPop(), {passive: true});
 document.addEventListener("keydown", e => {
   if (e.key === "/" && document.activeElement !== input && !e.metaKey && !e.ctrlKey) { e.preventDefault(); input.focus(); input.select(); }
 });
 
-let indexCount = null;
-async function loadLibrary() {
+let indexCount = null, libraryReq = 0;
+// The header and the empty-index check use the unfiltered count; the sidebar
+// breakdown follows the music filter.
+async function loadLibrary(music) {
+  const req = ++libraryReq;
   try {
-    const res = await fetch("/api/status");
-    if (!res.ok) return;
-    const s = await res.json();
-    indexCount = s.indexed;
-    $("index-info").textContent = `${s.indexed.toLocaleString()} videos indexed · runs entirely on this computer`;
-    renderLibrary(s);
+    const get = m => fetch(`/api/status?music=${m}`).then(r => r.ok ? r.json() : null);
+    const [all, filtered] = await Promise.all([indexCount === null ? get("include") : null, music === "include" ? null : get(music)]);
+    if (all) {
+      indexCount = all.indexed;
+      $("index-info").textContent = `${all.indexed.toLocaleString()} videos indexed · runs entirely on this computer`;
+    }
+    const s = filtered || all || (await get("include"));
+    if (s && req === libraryReq) renderLibrary(s);
   } catch { /* the sidebar is optional */ }
 }
 
@@ -405,10 +477,14 @@ function renderLibrary(s) {
     {key: "failed", n: s.failed_other, label: "Failed for another reason", note: "Retried next ingest"},
     {key: "pending", n: s.not_loaded, label: "Not loaded yet", note: "Run <code>likes ingest</code> without <code>--limit</code> to add them"},
   ].filter(p => p.n > 0);
-  if (!s.indexed && !failed && s.total_liked == null) return;  // nothing to report yet
+  const filtered = s.music !== "include";
+  if (!filtered && !s.indexed && !failed && s.total_liked == null) return;  // nothing to report yet
 
   const total = s.total_liked ?? s.indexed + failed;
-  const caption = s.total_liked != null ? "liked on YouTube" : "indexed (run <code>likes ingest</code> to count all your likes)";
+  $("library-title").textContent = {include: "Your liked videos", exclude: "Your liked videos, without music", only: "Your liked songs"}[s.music];
+  const caption = filtered
+    ? (s.music === "only" ? "songs liked" : "videos liked, not counting songs")
+    : s.total_liked != null ? "liked on YouTube" : "indexed (run <code>likes ingest</code> to count all your likes)";
   $("library-body").innerHTML = `
     <p class="lib-total">${fmt(total)}<small>${caption}</small></p>
     <p class="lib-ratio">${pctText(s.indexed)} loaded${s.blocked ? ` · ${pctText(s.blocked)} blocked` : ""}${s.failed_other ? ` · ${pctText(s.failed_other)} failed` : ""}</p>
@@ -421,6 +497,7 @@ function renderLibrary(s) {
         <span class="lbl">${p.label}<small>${p.note}</small></span>
         <span class="n">${fmt(p.n)} <small>${pctText(p.n)}</small></span></li>`).join("")}
     </ul>
+    ${filtered ? `<p class="lib-foot">Filtered by the music setting. YouTube only reports one like count for the whole account, so this counts what ingest has seen.</p>` : ""}
     ${s.last_run_at ? `<p class="lib-foot">Last ingest ${ago(Date.parse(s.last_run_at))}</p>` : ""}`;
   $("library").hidden = false;
 
@@ -444,7 +521,7 @@ $("theme").addEventListener("change", e => {
   try { t === "system" ? localStorage.removeItem(THEME_KEY) : localStorage.setItem(THEME_KEY, t); } catch { /* not saved */ }
 });
 
-loadLibrary();
+setMusicControl(state.music);
 renderHistory();
 const initial = new URLSearchParams(location.search).get("q");
 if (initial) { input.value = initial; search(initial, PAGE, false); }
