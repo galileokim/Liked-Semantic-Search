@@ -57,6 +57,18 @@ class ChromaVectorStore(VectorStore):
         )
         return {str(m["video_id"]) for m in result["metadatas"] or []}
 
+    def indexed_video_channels(self) -> dict[str, str]:
+        result = self._collection.get(
+            where={"kind": ChunkKind.METADATA.value}, include=["metadatas"]
+        )
+        return {str(m["video_id"]): str(m.get("channel", "")) for m in result["metadatas"] or []}
+
+    def video_ids_with_transcripts(self) -> set[str]:
+        result = self._collection.get(
+            where={"kind": ChunkKind.TRANSCRIPT.value}, include=["metadatas"]
+        )
+        return {str(m["video_id"]) for m in result["metadatas"] or []}
+
 
 def _to_metadata(chunk: Chunk) -> dict[str, str | float]:
     return {

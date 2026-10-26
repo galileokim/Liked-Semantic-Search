@@ -10,20 +10,44 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from collections.abc import Iterator, Sequence
 
-from likes_search.domain.models import Chunk, ChunkHit, Transcript, Video
+from likes_search.domain.models import Chunk, ChunkHit, IngestState, Transcript, Video
 
 Vector = Sequence[float]
 
 
 class TranscriptFetchError(Exception):
     """Transient/unexpected failure (rate limit, IP block, network). The video should be
-    retried on a later run, unlike a video that simply has no transcript."""
+    retried on a later run, unlike a video that simply has no transcript.
+
+    `blocked` marks YouTube refusing the request (IP block / bot check), as opposed to
+    any other failure.
+    """
+
+    def __init__(self, reason: str, blocked: bool = False) -> None:
+        super().__init__(reason)
+        self.reason = reason
+        self.blocked = blocked
 
 
 class LikedVideoSource(ABC):
     @abstractmethod
     def iter_liked_videos(self, limit: int | None = None) -> Iterator[Video]:
         """Yield liked videos, most recently liked first."""
+
+    @abstractmethod
+    def count_liked(self) -> int | None:
+        """Total number of liked videos on the account, or None if unknown."""
+
+
+class IngestStateRepository(ABC):
+    """Persists what the vector store can't tell us: the account's like count and the
+    videos whose transcript fetch failed (those are deliberately not indexed)."""
+
+    @abstractmethod
+    def load(self) -> IngestState: ...
+
+    @abstractmethod
+    def save(self, state: IngestState) -> None: ...
 
 
 class TranscriptProvider(ABC):
@@ -56,3 +80,11 @@ class VectorStore(ABC):
 
     @abstractmethod
     def indexed_video_ids(self) -> set[str]: ...
+
+    @abstractmethod
+    def indexed_video_channels(self) -> dict[str, str]:
+        """Channel name of every indexed video, by video id."""
+
+    @abstractmethod
+    def video_ids_with_transcripts(self) -> set[str]:
+        """Indexed videos that have at least one transcript chunk."""

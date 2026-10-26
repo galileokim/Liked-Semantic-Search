@@ -10,16 +10,18 @@ from functools import cached_property
 
 from likes_search.adapters.outbound.chroma_store import ChromaVectorStore
 from likes_search.adapters.outbound.embedder import SentenceTransformerEmbedder
+from likes_search.adapters.outbound.ingest_state import JsonIngestStateRepository
 from likes_search.adapters.outbound.transcripts import YouTubeTranscriptApiProvider
 from likes_search.adapters.outbound.youtube_api import (
     YouTubeApiLikedVideoSource,
     load_credentials,
 )
 from likes_search.application.ingest import IngestLikedVideos
+from likes_search.application.library import GetLibraryStatus
 from likes_search.application.search import SearchLikedVideos
 from likes_search.config import Settings
 from likes_search.domain.chunking import ChunkingConfig
-from likes_search.ports import Embedder, VectorStore
+from likes_search.ports import Embedder, IngestStateRepository, VectorStore
 
 
 class Container:
@@ -36,6 +38,10 @@ class Container:
     def store(self) -> VectorStore:
         return ChromaVectorStore(self.settings.chroma_path)
 
+    @cached_property
+    def ingest_state(self) -> IngestStateRepository:
+        return JsonIngestStateRepository(self.settings.ingest_state_file)
+
     def authenticate(self) -> None:
         load_credentials(self.settings.client_secrets_file, self.settings.token_file)
 
@@ -49,6 +55,7 @@ class Container:
             ),
             embedder=self.embedder,
             store=self.store,
+            state=self.ingest_state,
             chunking=ChunkingConfig(
                 max_words=self.settings.chunk_max_words,
                 overlap_words=self.settings.chunk_overlap_words,
@@ -57,3 +64,6 @@ class Container:
 
     def search(self) -> SearchLikedVideos:
         return SearchLikedVideos(self.embedder, self.store)
+
+    def library_status(self) -> GetLibraryStatus:
+        return GetLibraryStatus(self.store, self.ingest_state)

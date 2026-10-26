@@ -6,6 +6,7 @@ from collections.abc import Sequence
 from youtube_transcript_api import (
     CouldNotRetrieveTranscript,
     NoTranscriptFound,
+    RequestBlocked,
     TranscriptsDisabled,
     VideoUnavailable,
     YouTubeTranscriptApi,
@@ -33,6 +34,8 @@ class YouTubeTranscriptApiProvider(TranscriptProvider):
             fetched = self._api.fetch(video_id, languages=self._languages)
         except (NoTranscriptFound, TranscriptsDisabled, VideoUnavailable):
             return None
+        except RequestBlocked as e:  # includes IpBlocked
+            raise TranscriptFetchError(type(e).__name__, blocked=True) from e
         except CouldNotRetrieveTranscript as e:
             raise TranscriptFetchError(type(e).__name__) from e
 

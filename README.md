@@ -22,24 +22,6 @@ query ──► embed (with query prefix) ──► top chunks ──► group b
 - **Ingest is idempotent:** already-indexed videos are skipped; videos whose transcript
   fetch failed (rate limit / IP block) are *not* indexed, so the next run retries them.
 
-## Architecture (hexagonal)
-
-```
-src/likes_search/
-  domain/            pure models + chunking logic (no I/O)
-  ports.py           ABCs the core depends on: LikedVideoSource, TranscriptProvider,
-                     Embedder, VectorStore
-  application/       use cases: IngestLikedVideos, SearchLikedVideos, evaluate
-  adapters/
-    outbound/        YouTube Data API, youtube-transcript-api, sentence-transformers, Chroma
-    inbound/         Typer CLI, FastAPI (JSON API + minimal web UI)
-  bootstrap.py       composition root — the only place that wires adapters to ports
-  config.py          pydantic-settings (env vars prefixed LIKES_)
-```
-
-The application layer is tested against in-memory fakes (`tests/fakes.py`) — no network,
-model, or database needed.
-
 ## Setup
 
 ### 1. Google OAuth client (one-time, ~5 min, no Google review needed)
@@ -73,6 +55,7 @@ uv run likes auth                      # browser consent, caches token in .data/
 uv run likes ingest --limit 50         # start small; re-run anytime to add new likes
 uv run likes search "guy explains attention with a whiteboard"
 uv run likes serve                     # web UI at http://127.0.0.1:8000
+uv run likes serve --reload            # dev: restarts on Python changes, HTML edits show on refresh
 ```
 
 ### Evaluating retrieval quality

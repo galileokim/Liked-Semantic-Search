@@ -1,0 +1,530 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Liked Videos Search</title>
+<script>
+  // Apply the saved theme before first paint so the page never flashes the wrong one.
+  try {
+    const t = localStorage.getItem("likes-search:theme");
+    if (t === "light" || t === "dark") document.documentElement.dataset.theme = t;
+  } catch { /* storage unavailable: follow the system */ }
+</script>
+<style>
+  :root {
+    --bg: #f1f2f4; --surface: #ffffff; --ink: #1d1f22; --muted: #5f646b; --line: #e1e3e6;
+    --accent: #2457c5; --accent-soft: #e8eefb; --on-accent: #ffffff; --mark: #fff0a8; --danger: #b3261e;
+    /* Library breakdown, fixed order (validated for colour-vision deficiency). */
+    --s-transcript: #2a78d6; --s-meta: #1baf7a; --s-blocked: #eda100; --s-failed: #6250d6;
+    color-scheme: light;
+  }
+  /* Dark tokens apply when chosen explicitly, or when following a dark system setting.
+     The two blocks must stay identical. */
+  :root[data-theme="dark"] {
+    --bg: #111316; --surface: #1c1f23; --ink: #e8e9eb; --muted: #a2a7ae; --line: #2f3338;
+    --accent: #8fb0ff; --accent-soft: #24304a; --on-accent: #0e1525; --mark: #5a4b12; --danger: #ff8a80;
+    --s-transcript: #3987e5; --s-meta: #199e70; --s-blocked: #c98500; --s-failed: #9085e9;
+    color-scheme: dark;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #111316; --surface: #1c1f23; --ink: #e8e9eb; --muted: #a2a7ae; --line: #2f3338;
+      --accent: #8fb0ff; --accent-soft: #24304a; --on-accent: #0e1525; --mark: #5a4b12; --danger: #ff8a80;
+      --s-transcript: #3987e5; --s-meta: #199e70; --s-blocked: #c98500; --s-failed: #9085e9;
+      color-scheme: dark;
+    }
+  }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  ::selection { background: var(--accent-soft); }
+  a { color: var(--accent); text-underline-offset: .18em; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+  .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 1.25rem; }
+
+  .layout { display: grid; grid-template-columns: 264px minmax(0, 1fr); gap: 1.5rem 2rem; max-width: 1120px; margin: 0 auto; padding: 2rem 1.5rem 4rem; }
+  header { grid-column: 1 / -1; display: flex; justify-content: space-between; align-items: baseline; gap: 1rem; flex-wrap: wrap; }
+  h1 { margin: 0; font-size: 1.5rem; letter-spacing: -.01em; }
+  .index-info { color: var(--muted); font-size: .875rem; }
+  .head-right { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; }
+
+  /* Segmented control (theme switch, music filter): a radio group */
+  .seg { display: inline-flex; gap: 2px; margin: 0; min-width: 0; padding: 4px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
+  .seg legend { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+  .seg label { position: relative; padding: .3rem .7rem; font-size: .8125rem; color: var(--muted); border-radius: 6px; cursor: pointer; }
+  .seg input { position: absolute; opacity: 0; inset: 0; margin: 0; cursor: pointer; }
+  .seg label:has(input:checked) { background: var(--accent-soft); color: var(--ink); font-weight: 600; }
+  .seg label:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+  /* Filter button + popover */
+  .filter-btn { display: inline-flex; align-items: center; gap: .45rem; white-space: nowrap; }
+  .filter-btn svg { width: 16px; height: 16px; flex: none; }
+  .filter-btn[data-active] { box-shadow: inset 0 0 0 1.5px var(--accent); }
+  .pop { position: fixed; inset: auto; margin: 0; width: min(300px, calc(100vw - 16px)); padding: 1rem; color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 12px 32px rgba(0, 0, 0, .14), 0 2px 6px rgba(0, 0, 0, .08); }
+  .choices { margin: 0; padding: 0; border: 0; min-width: 0; }
+  .choices legend { padding: 0 0 .4rem; font-size: .8125rem; font-weight: 600; color: var(--muted); }
+  .choices label { display: flex; gap: .65rem; align-items: flex-start; padding: .5rem .6rem; margin: 0 -.6rem; border-radius: 8px; cursor: pointer; font-size: .9375rem; }
+  .choices label:hover, .choices label:has(input:checked) { background: var(--accent-soft); }
+  .choices input { margin: .3rem 0 0; accent-color: var(--accent); }
+  .choices small { display: block; color: var(--muted); font-size: .8125rem; }
+  .pop-note { margin: .75rem 0 0; font-size: .75rem; color: var(--muted); }
+  .tag { display: inline-block; padding: 0 .45rem; font-size: .75rem; font-weight: 600; border-radius: 999px; background: var(--accent-soft); color: var(--ink); }
+
+  /* History sidebar */
+  aside { position: sticky; top: 1.5rem; align-self: start; display: flex; flex-direction: column; gap: 1rem; }
+  .side-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: .75rem; }
+  aside h2 { margin: 0; font-size: .875rem; color: var(--muted); font-weight: 600; }
+  .link-btn { background: none; border: 0; padding: 0; color: var(--accent); font: inherit; font-size: .8125rem; cursor: pointer; }
+  .link-btn:hover { text-decoration: underline; }
+  #history { list-style: none; margin: 0; padding: 0; }
+  #history { display: flex; flex-direction: column; gap: 2px; margin: 0 -.5rem; }
+  #history li { display: flex; align-items: flex-start; border-radius: 8px; }
+  #history li:hover, #history li[aria-current="true"] { background: var(--accent-soft); }
+  .h-run { flex: 1; min-width: 0; text-align: left; background: none; border: 0; padding: .55rem .5rem; color: var(--ink); font: inherit; cursor: pointer; }
+  .h-q { display: block; font-size: .9rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .h-meta { display: block; font-size: .75rem; color: var(--muted); }
+  .h-del { flex: none; background: none; border: 0; padding: .55rem .5rem; color: var(--muted); cursor: pointer; border-radius: 6px; opacity: 0; }
+  #history li:hover .h-del, .h-del:focus-visible { opacity: 1; }
+  .h-del:hover { color: var(--danger); }
+  .h-del svg { display: block; width: 14px; height: 14px; }
+  .side-empty { margin: 0; color: var(--muted); font-size: .875rem; }
+
+  /* Library breakdown */
+  #library h2 { margin-bottom: .5rem; }
+  .lib-total { margin: .1rem 0 0; font-size: 1.75rem; font-weight: 700; letter-spacing: -.02em; font-variant-numeric: tabular-nums; line-height: 1.2; }
+  .lib-total small { display: block; font-size: .8125rem; font-weight: 400; letter-spacing: 0; color: var(--muted); }
+  .lib-ratio { margin: .6rem 0 0; font-size: .8125rem; color: var(--ink); }
+  .lib-bar { display: flex; gap: 2px; height: 10px; margin-top: .6rem; border-radius: 4px; overflow: hidden; background: var(--line); }
+  .lib-bar span { display: block; height: 100%; min-width: 3px; }
+  .lib-legend { list-style: none; margin: .75rem 0 0; padding: 0; font-size: .8125rem; }
+  .lib-legend li { display: grid; grid-template-columns: 10px minmax(0, 1fr) auto; gap: .5rem; align-items: baseline; padding: .25rem .35rem; margin: 0 -.35rem; border-radius: 6px; }
+  .lib-legend li.hot { background: var(--accent-soft); }
+  .lib-legend i { width: 10px; height: 10px; border-radius: 3px; align-self: center; }
+  .lib-legend .lbl small { display: block; color: var(--muted); font-size: .75rem; }
+  .lib-legend .n { font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
+  .lib-legend .n small { color: var(--muted); }
+  .lib-foot { margin: .6rem 0 0; font-size: .75rem; color: var(--muted); }
+
+  /* Search */
+  form { display: flex; gap: .5rem; }
+  .search-card { padding: 1rem; }
+  input[type="search"] { flex: 1; min-width: 0; padding: .7rem .9rem; font: inherit; color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 10px; }
+  input[type="search"]::placeholder { color: var(--muted); }
+  .btn { padding: .7rem 1.1rem; font: inherit; font-weight: 600; color: var(--on-accent); background: var(--accent); border: 0; border-radius: 10px; cursor: pointer; }
+  .btn:disabled { opacity: .6; cursor: progress; }
+  .btn-quiet { color: var(--accent); background: var(--accent-soft); }
+  #status { min-height: 1.5rem; margin: 1.25rem .25rem .75rem; color: var(--muted); font-size: .875rem; }
+  .notice { padding: 1.25rem; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); }
+  .notice.error { border-color: var(--danger); }
+  .notice p { margin: 0 0 .5rem; } .notice p:last-child { margin-bottom: 0; }
+  code { white-space: nowrap; font-size: .875em; background: var(--accent-soft); padding: .1em .35em; border-radius: 4px; }
+
+  /* Results */
+  #results { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: .875rem; }
+  .r { display: grid; grid-template-columns: 168px minmax(0, 1fr); gap: 1.25rem; padding: 1.25rem; background: var(--surface); border: 1px solid var(--line); border-radius: 14px; }
+  .thumb { display: block; width: 168px; aspect-ratio: 16 / 9; border-radius: 8px; background: var(--line); overflow: hidden; }
+  .thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .r-title { font-weight: 600; font-size: 1.0625rem; line-height: 1.35; }
+  .r-meta { margin-top: .15rem; color: var(--muted); font-size: .875rem; }
+  .r-meta a { font-weight: 600; }
+  .r-snip { margin: .4rem 0 0; font-size: .9375rem; max-width: 70ch; }
+  mark { background: var(--mark); color: inherit; border-radius: 2px; padding: 0 .1em; }
+  .strength { display: flex; align-items: center; gap: .5rem; margin-top: .5rem; font-size: .8125rem; color: var(--muted); }
+  .bar { width: 96px; height: 6px; border-radius: 3px; background: var(--line); overflow: hidden; }
+  .bar span { display: block; height: 100%; background: var(--accent); }
+
+  details.why { margin-top: .5rem; font-size: .875rem; }
+  details.why summary { cursor: pointer; color: var(--accent); font-weight: 600; width: fit-content; }
+  .why ul { margin: .75rem 0 0; padding: .875rem 0 0 1.25rem; border-top: 1px solid var(--line); }
+  .why li + li { margin-top: .35rem; }
+  .why .num { font-variant-numeric: tabular-nums; }
+
+  #more { display: block; margin: 1.5rem auto 0; }
+
+  @media (max-width: 760px) {
+    .layout { grid-template-columns: minmax(0, 1fr); gap: 1rem; padding: 1.25rem 1rem 3rem; }
+    .card { padding: 1rem; }
+    form { flex-wrap: wrap; }
+    input[type="search"] { flex: 1 1 100%; }
+    form .btn { flex: 1; justify-content: center; }
+    aside { position: static; order: 2; }
+    main { order: 1; }
+    #history { flex-direction: row; gap: .5rem; overflow-x: auto; margin: 0; padding-bottom: .25rem; }
+    #history li { flex: none; max-width: 70vw; border: 1px solid var(--line); }
+    .h-del { opacity: 1; }
+    .r { grid-template-columns: 112px minmax(0, 1fr); gap: .875rem; padding: 1rem; }
+    .thumb { width: 112px; }
+  }
+</style>
+</head>
+<body>
+<div class="layout">
+  <header>
+    <h1>Search your liked videos</h1>
+    <div class="head-right">
+      <span class="index-info" id="index-info">Runs entirely on this computer</span>
+      <fieldset class="seg" id="theme">
+        <legend>Theme</legend>
+        <label><input type="radio" name="theme" value="system">System</label>
+        <label><input type="radio" name="theme" value="light">Light</label>
+        <label><input type="radio" name="theme" value="dark">Dark</label>
+      </fieldset>
+    </div>
+  </header>
+
+  <aside aria-label="Library and history">
+    <section class="card" id="library" aria-labelledby="library-title" hidden>
+      <h2 id="library-title">Your liked videos</h2>
+      <div id="library-body"></div>
+    </section>
+    <section class="card" aria-labelledby="history-title">
+    <div class="side-head">
+      <h2 id="history-title">Recent searches</h2>
+      <button type="button" class="link-btn" id="clear-history" hidden>Clear</button>
+    </div>
+    <ul id="history"></ul>
+    <p class="side-empty" id="history-empty">Your searches will show up here.</p>
+    </section>
+  </aside>
+
+  <main>
+    <form id="f" class="card search-card" role="search">
+      <label for="q" class="sr-only">Describe the video you're looking for</label>
+      <input id="q" type="search" autocomplete="off" placeholder="that video where a guy explains transformers with a whiteboard" autofocus>
+      <button class="btn" id="go">Search</button>
+      <button type="button" class="btn btn-quiet filter-btn" id="filter-btn" popovertarget="filter-pop">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 3.5h12M4.5 8h7M7 12.5h2" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" fill="none"/></svg>
+        <span id="filter-label">Filter</span>
+      </button>
+    </form>
+    <div id="filter-pop" class="pop" popover>
+      <fieldset class="choices" id="music">
+        <legend>Music</legend>
+        <label><input type="radio" name="music" value="include"><span>Show music<small>Search everything you've liked</small></span></label>
+        <label><input type="radio" name="music" value="exclude"><span>Hide music<small>Leave songs out of results and counts</small></span></label>
+        <label><input type="radio" name="music" value="only"><span>Only music<small>Just your liked songs</small></span></label>
+      </fieldset>
+      <p class="pop-note">Songs are videos from YouTube's auto-generated “Artist - Topic” channels.</p>
+    </div>
+    <p id="status" role="status" aria-live="polite"></p>
+    <div id="notice"></div>
+    <ol id="results"></ol>
+    <button type="button" class="btn btn-quiet" id="more" hidden>Show 10 more</button>
+  </main>
+</div>
+
+<script>
+const PAGE = 10, MAX_K = 50, HISTORY_KEY = "likes-search:history", HISTORY_MAX = 25;
+const STOPWORDS = new Set("a an and are as at be but by for from has have he her his how i in into is it its me my of on or our she so that the their them then there they this to was we were what when where which who why will with you your".split(" "));
+
+const $ = id => document.getElementById(id);
+const form = $("f"), input = $("q"), go = $("go"), statusEl = $("status"), notice = $("notice"),
+      list = $("results"), more = $("more"), historyEl = $("history");
+
+const esc = s => String(s).replace(/[&<>"']/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"}[c]));
+const clock = sec => {
+  const s = Math.floor(sec), h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), r = String(s % 60).padStart(2, "0");
+  return h ? `${h}:${String(m).padStart(2, "0")}:${r}` : `${m}:${r}`;
+};
+const at = (videoId, sec) => `https://www.youtube.com/watch?v=${encodeURIComponent(videoId)}&t=${Math.floor(sec)}s`;
+const words = s => (s.toLowerCase().match(/[a-z0-9]+/g) || []);
+const queryTerms = q => new Set(words(q).filter(w => w.length > 1 && !STOPWORDS.has(w)));
+const ago = t => {
+  const s = (Date.now() - t) / 1000;
+  if (s < 60) return "just now";
+  if (s < 3600) return `${Math.floor(s / 60)} min ago`;
+  if (s < 86400) return `${Math.floor(s / 3600)} h ago`;
+  return `${Math.floor(s / 86400)} d ago`;
+};
+
+// Escape and highlight query terms by tokenizing the raw text, so highlighting never
+// touches the markup produced by escaping.
+function highlight(text, terms) {
+  return text.split(/([A-Za-z0-9]+)/).map((tok, i) =>
+    i % 2 && terms.has(tok.toLowerCase()) ? `<mark>${esc(tok)}</mark>` : esc(tok)).join("");
+}
+function trimAtWord(text, max) {
+  if (text.length <= max) return text;
+  const cut = text.slice(0, max);
+  return cut.slice(0, Math.max(cut.lastIndexOf(" "), max * .8)).trimEnd() + "…";
+}
+
+// ---- History (kept in this browser only) ----
+function loadHistory() {
+  try { return JSON.parse(localStorage.getItem(HISTORY_KEY)) || []; } catch { return []; }
+}
+function saveHistory(items) {
+  try { localStorage.setItem(HISTORY_KEY, JSON.stringify(items)); } catch { /* storage unavailable */ }
+}
+function remember(q, count) {
+  const items = loadHistory().filter(h => h.q.toLowerCase() !== q.toLowerCase());
+  items.unshift({q, count, at: Date.now()});
+  saveHistory(items.slice(0, HISTORY_MAX));
+  renderHistory();
+}
+const X_ICON = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"/></svg>';
+function renderHistory() {
+  const items = loadHistory(), current = state.q.toLowerCase();
+  $("history-empty").hidden = items.length > 0;
+  $("clear-history").hidden = items.length === 0;
+  historyEl.innerHTML = items.map((h, i) => `
+    <li${h.q.toLowerCase() === current ? ' aria-current="true"' : ""}>
+      <button type="button" class="h-run" data-i="${i}">
+        <span class="h-q">${esc(h.q)}</span>
+        <span class="h-meta">${h.count} ${h.count === 1 ? "video" : "videos"} · ${ago(h.at)}</span>
+      </button>
+      <button type="button" class="h-del" data-del="${i}" aria-label="Remove “${esc(h.q)}” from history">${X_ICON}</button>
+    </li>`).join("");
+}
+historyEl.addEventListener("click", e => {
+  const run = e.target.closest(".h-run"), del = e.target.closest(".h-del"), items = loadHistory();
+  if (run) { input.value = items[run.dataset.i].q; search(input.value, PAGE, true); }
+  if (del) { items.splice(del.dataset.del, 1); saveHistory(items); renderHistory(); }
+});
+$("clear-history").addEventListener("click", () => { saveHistory([]); renderHistory(); input.focus(); });
+
+// ---- Search ----
+// Music = songs from YouTube's auto-generated "Artist - Topic" channels.
+const MUSIC_KEY = "likes-search:music", MUSIC_VALUES = ["include", "exclude", "only"];
+const savedMusic = (() => { try { return localStorage.getItem(MUSIC_KEY); } catch { return null; } })();
+const urlMusic = new URLSearchParams(location.search).get("music");
+const state = {q: "", k: PAGE, results: [], music: MUSIC_VALUES.find(v => v === (urlMusic || savedMusic)) || "include"};
+const searchUrl = (q, music) => `?q=${encodeURIComponent(q)}` + (music === "include" ? "" : `&music=${music}`);
+let inflight = null;
+
+async function search(q, k, push, music = state.music) {
+  q = q.trim();
+  if (!q) { input.focus(); return; }
+  inflight?.abort();
+  const ctrl = inflight = new AbortController();
+  const growing = q === state.q && music === state.music && k > state.k;
+  go.disabled = more.disabled = true;
+  statusEl.textContent = growing ? "Loading more…" : "Searching…";
+  const slow = setTimeout(() => {
+    statusEl.textContent = "Still searching. The first search after starting the server loads the model, which takes a few seconds.";
+  }, 2000);
+  if (!growing) notice.innerHTML = "";
+
+  try {
+    const res = await fetch(`/api/search?k=${k}&q=${encodeURIComponent(q)}&music=${music}`, {signal: ctrl.signal});
+    if (!res.ok) throw new Error(`server error ${res.status}`);
+    const items = await res.json();
+    const before = growing ? state.results.length : 0;
+    Object.assign(state, {q, k, results: items, music});
+    if (push) history.pushState({q}, "", searchUrl(q, music));
+    render(before);
+    if (!growing) remember(q, items.length);
+    else renderHistory();
+  } catch (err) {
+    if (err.name === "AbortError") return;
+    const offline = err instanceof TypeError;
+    statusEl.textContent = "";
+    notice.innerHTML = `<div class="notice error"><p>${offline
+      ? "Can't reach the search server. Is <code>likes serve</code> still running?"
+      : `The search failed (${esc(err.message)}). Check the terminal running <code>likes serve</code> for details.`}</p>
+      <p><button type="button" class="btn btn-quiet" id="retry">Try again</button></p></div>`;
+    $("retry").onclick = () => search(q, k, false, music);
+  } finally {
+    clearTimeout(slow);
+    if (inflight === ctrl) { go.disabled = more.disabled = false; inflight = null; }
+  }
+}
+
+function render(firstNew) {
+  const {q, k, results} = state;
+  const terms = queryTerms(q), top = results[0]?.score ?? 0;
+  more.hidden = results.length < k || k >= MAX_K;
+
+  if (!results.length) {
+    list.innerHTML = "";
+    statusEl.textContent = "No matches.";
+    const empty = indexCount === 0;
+    notice.innerHTML = `<div class="notice">${empty
+      ? "<p>Your index is empty, so there's nothing to search yet.</p><p>Run <code>likes ingest</code> in a terminal to add your liked videos, then search again.</p>"
+      : state.music === "only"
+        ? `<p>No music matched “${esc(q)}”.</p><p>Only songs from auto-generated “Artist - Topic” channels count as music. Set Music to Show to search everything.</p>`
+        : `<p>No liked videos matched “${esc(q)}”${state.music === "exclude" ? " with music hidden" : ""}.</p><p>Try describing what happens in the video or what someone says, rather than its exact title.</p>`}</div>`;
+    return;
+  }
+
+  const scope = {include: "", exclude: " (music hidden)", only: " (music only)"}[state.music];
+  statusEl.textContent = `Showing ${results.length} ${results.length === 1 ? (state.music === "only" ? "song" : "video") : (state.music === "only" ? "songs" : "videos")}${scope}, best match first` +
+    (results.length < k && k > PAGE ? ". That's every match." : k >= MAX_K ? `. ${MAX_K} is the most shown at once.` : ".");
+  list.innerHTML = results.map((m, i) => resultHtml(m, i, results.length, top, terms)).join("");
+  if (firstNew > 0) list.children[firstNew]?.querySelector(".r-title")?.focus();
+}
+
+function resultHtml(m, i, total, top, terms) {
+  const transcript = m.match_kind === "transcript" && m.start_seconds != null;
+  // A metadata chunk starts with the title and a "Channel:" line, which the result
+  // already shows; keep only the tags and description.
+  const snippet = transcript ? m.snippet : m.snippet.split("\n")
+    .filter((line, i) => !(i === 0 && line === m.title) && !line.startsWith("Channel: "))
+    .join(" · ").trim();
+  const shared = [...new Set(words(m.title + " " + m.snippet))].filter(w => terms.has(w));
+  const rel = top > 0 ? Math.max(0, Math.min(1, m.score / top)) : 0;
+  const gap = top - m.score;
+  const others = m.other_moments.map(o =>
+    `<a href="${esc(at(m.video_id, o.start_seconds))}" target="_blank" rel="noopener">${clock(o.start_seconds)}</a> <span class="num">(${o.score.toFixed(3)})</span>`);
+
+  const reasons = [
+    `Similarity <span class="num">${m.score.toFixed(3)}</span> between your search and this passage (cosine, higher is closer). ` +
+      (i === 0 ? "This is the closest match." : `Ranked ${i + 1} of ${total}, <span class="num">${gap.toFixed(3)}</span> below the top result.`),
+    transcript
+      ? `Matched something said in the video at <a href="${esc(m.url)}" target="_blank" rel="noopener">${clock(m.start_seconds)}</a>.`
+      : "Matched the video's title, channel, tags and description. No spoken passage scored higher.",
+    shared.length
+      ? `Shares these words with your search: ${shared.map(w => `<mark>${esc(w)}</mark>`).join(", ")}.`
+      : "Shares no words with your search, so it matched on meaning alone.",
+  ];
+  if (m.matched_chunks > 1) reasons.push(`${m.matched_chunks} parts of this video were among the closest candidates.`);
+  if (others.length) reasons.push(`Other matching moments: ${others.join(", ")}.`);
+
+  return `<li class="r">
+    <a class="thumb" href="${esc(m.url)}" target="_blank" rel="noopener" tabindex="-1" aria-hidden="true">
+      <img src="${esc(m.thumbnail_url)}" alt="" loading="lazy" onerror="this.remove()"></a>
+    <div>
+      <a class="r-title" href="${esc(m.url)}" target="_blank" rel="noopener">${esc(m.title)}</a>
+      <div class="r-meta">${m.is_music ? '<span class="tag">Music</span> ' : ""}${esc(m.channel)} · ${transcript
+        ? `<a href="${esc(m.url)}" target="_blank" rel="noopener">Jump to ${clock(m.start_seconds)}</a>`
+        : "Matched title and description"}</div>
+      ${snippet ? `<p class="r-snip">${highlight(trimAtWord(snippet, 280), terms)}</p>` : ""}
+      <div class="strength"><span class="bar" aria-hidden="true"><span style="width:${Math.round(rel * 100)}%"></span></span>
+        ${i === 0 ? "Best match" : `${Math.round(rel * 100)}% of the best match's score`}</div>
+      <details class="why"><summary>Why this match</summary><ul>${reasons.map(r => `<li>${r}</li>`).join("")}</ul></details>
+    </div>
+  </li>`;
+}
+
+form.addEventListener("submit", e => { e.preventDefault(); search(input.value, PAGE, input.value.trim() !== state.q); });
+more.addEventListener("click", () => search(state.q, Math.min(state.k + PAGE, MAX_K), false));
+more.textContent = `Show ${PAGE} more`;
+window.addEventListener("popstate", () => {
+  const params = new URLSearchParams(location.search);
+  const q = params.get("q") || "", music = MUSIC_VALUES.find(v => v === params.get("music")) || "include";
+  input.value = q;
+  setMusicControl(music);
+  if (q) search(q, PAGE, false, music);
+});
+
+// ---- Music filter (in the Filter popover) ----
+const filterBtn = $("filter-btn"), filterPop = $("filter-pop");
+function setMusicControl(value) {
+  document.querySelector(`#music input[value="${value}"]`).checked = true;
+  $("filter-label").textContent = {include: "Filter", exclude: "Music hidden", only: "Only music"}[value];
+  filterBtn.toggleAttribute("data-active", value !== "include");
+  loadLibrary(value);
+}
+$("music").addEventListener("change", e => {
+  const music = e.target.value;
+  try { localStorage.setItem(MUSIC_KEY, music); } catch { /* not saved */ }
+  setMusicControl(music);
+  filterPop.hidePopover();
+  if (state.q) {
+    history.replaceState({q: state.q}, "", searchUrl(state.q, music));
+    search(state.q, PAGE, false, music);
+  } else {
+    state.music = music;
+  }
+});
+
+// Anchor the popover under the button, right-aligned, kept on screen.
+function placeFilterPop() {
+  const r = filterBtn.getBoundingClientRect(), w = Math.min(300, innerWidth - 16);
+  filterPop.style.top = `${r.bottom + 6}px`;
+  filterPop.style.left = `${Math.max(8, Math.min(r.right - w, innerWidth - w - 8))}px`;
+}
+filterPop.addEventListener("beforetoggle", e => { if (e.newState === "open") placeFilterPop(); });
+addEventListener("resize", () => filterPop.matches(":popover-open") && placeFilterPop());
+addEventListener("scroll", () => filterPop.matches(":popover-open") && placeFilterPop(), {passive: true});
+document.addEventListener("keydown", e => {
+  if (e.key === "/" && document.activeElement !== input && !e.metaKey && !e.ctrlKey) { e.preventDefault(); input.focus(); input.select(); }
+});
+
+let indexCount = null, libraryReq = 0;
+// The header and the empty-index check use the unfiltered count; the sidebar
+// breakdown follows the music filter.
+async function loadLibrary(music) {
+  const req = ++libraryReq;
+  try {
+    const get = m => fetch(`/api/status?music=${m}`).then(r => r.ok ? r.json() : null);
+    const [all, filtered] = await Promise.all([indexCount === null ? get("include") : null, music === "include" ? null : get(music)]);
+    if (all) {
+      indexCount = all.indexed;
+      $("index-info").textContent = `${all.indexed.toLocaleString()} videos indexed · runs entirely on this computer`;
+    }
+    const s = filtered || all || (await get("include"));
+    if (s && req === libraryReq) renderLibrary(s);
+  } catch { /* the sidebar is optional */ }
+}
+
+// ---- Library breakdown: how many likes loaded, and what failed ----
+function renderLibrary(s) {
+  const failed = s.blocked + s.failed_other;
+  // Base on the account's like count; fall back to what's accounted for (also covers
+  // indexed videos that have since been unliked).
+  const base = Math.max(s.total_liked ?? 0, s.indexed + failed + s.not_loaded) || 1;
+  const pct = n => n / base * 100;
+  const fmt = n => n.toLocaleString();
+  const pctText = n => { const p = pct(n); return p > 0 && p < 1 ? "<1%" : `${Math.round(p)}%`; };
+  const parts = [
+    {key: "transcript", n: s.with_transcript, label: "Loaded with transcript", note: "Searchable by what's said"},
+    {key: "meta", n: s.metadata_only, label: "Loaded without transcript", note: "No captions; title and description only"},
+    {key: "blocked", n: s.blocked, label: "Blocked by YouTube", note: "IP blocked or rate-limited; retried next ingest"},
+    {key: "failed", n: s.failed_other, label: "Failed for another reason", note: "Retried next ingest"},
+    {key: "pending", n: s.not_loaded, label: "Not loaded yet", note: "Run <code>likes ingest</code> without <code>--limit</code> to add them"},
+  ].filter(p => p.n > 0);
+  const filtered = s.music !== "include";
+  if (!filtered && !s.indexed && !failed && s.total_liked == null) return;  // nothing to report yet
+
+  const total = s.total_liked ?? s.indexed + failed;
+  $("library-title").textContent = {include: "Your liked videos", exclude: "Your liked videos, without music", only: "Your liked songs"}[s.music];
+  const caption = filtered
+    ? (s.music === "only" ? "songs liked" : "videos liked, not counting songs")
+    : s.total_liked != null ? "liked on YouTube" : "indexed (run <code>likes ingest</code> to count all your likes)";
+  $("library-body").innerHTML = `
+    <p class="lib-total">${fmt(total)}<small>${caption}</small></p>
+    <p class="lib-ratio">${pctText(s.indexed)} loaded${s.blocked ? ` · ${pctText(s.blocked)} blocked` : ""}${s.failed_other ? ` · ${pctText(s.failed_other)} failed` : ""}</p>
+    <div class="lib-bar" role="img" aria-label="${parts.map(p => `${p.label}: ${fmt(p.n)}`).join(", ")}">
+      ${parts.filter(p => p.key !== "pending").map(p =>
+        `<span data-k="${p.key}" title="${p.label}: ${fmt(p.n)} (${pctText(p.n)})" style="width:${pct(p.n)}%;background:var(--s-${p.key})"></span>`).join("")}
+    </div>
+    <ul class="lib-legend">${parts.map(p => `
+      <li data-k="${p.key}"><i style="background:${p.key === "pending" ? "var(--line)" : `var(--s-${p.key})`}"></i>
+        <span class="lbl">${p.label}<small>${p.note}</small></span>
+        <span class="n">${fmt(p.n)} <small>${pctText(p.n)}</small></span></li>`).join("")}
+    </ul>
+    ${filtered ? `<p class="lib-foot">Filtered by the music setting. YouTube only reports one like count for the whole account, so this counts what ingest has seen.</p>` : ""}
+    ${s.last_run_at ? `<p class="lib-foot">Last ingest ${ago(Date.parse(s.last_run_at))}</p>` : ""}`;
+  $("library").hidden = false;
+
+  // Hovering a bar segment highlights its legend row, and the reverse.
+  const body = $("library-body");
+  const hot = k => body.querySelectorAll(".lib-legend li").forEach(li => li.classList.toggle("hot", li.dataset.k === k));
+  body.querySelectorAll("[data-k]").forEach(el => {
+    el.addEventListener("mouseenter", () => hot(el.dataset.k));
+    el.addEventListener("mouseleave", () => hot(null));
+  });
+}
+
+// ---- Theme ----
+const THEME_KEY = "likes-search:theme";
+const themeNow = document.documentElement.dataset.theme || "system";
+document.querySelector(`#theme input[value="${themeNow}"]`).checked = true;
+$("theme").addEventListener("change", e => {
+  const t = e.target.value;
+  if (t === "system") delete document.documentElement.dataset.theme;
+  else document.documentElement.dataset.theme = t;
+  try { t === "system" ? localStorage.removeItem(THEME_KEY) : localStorage.setItem(THEME_KEY, t); } catch { /* not saved */ }
+});
+
+setMusicControl(state.music);
+renderHistory();
+const initial = new URLSearchParams(location.search).get("q");
+if (initial) { input.value = initial; search(initial, PAGE, false); }
+</script>
+</body>
+</html>
