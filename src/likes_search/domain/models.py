@@ -54,6 +54,23 @@ class ChunkHit(_Frozen):
     score: float  # cosine similarity; higher is better
 
 
+def is_music_channel(channel: str) -> bool:
+    """YouTube auto-generates an "Artist - Topic" channel for songs; liking a song in
+    YouTube Music lands it in the liked videos under one. These never have captions."""
+    return channel.endswith(" - Topic")
+
+
+class MusicFilter(StrEnum):
+    INCLUDE = "include"
+    EXCLUDE = "exclude"
+    ONLY = "only"
+
+    def allows(self, channel: str) -> bool:
+        if self is MusicFilter.INCLUDE:
+            return True
+        return is_music_channel(channel) == (self is MusicFilter.ONLY)
+
+
 class FailedVideo(_Frozen):
     video_id: str
     title: str
@@ -114,3 +131,8 @@ class VideoMatch(_Frozen):
     def thumbnail_url(self) -> str:
         # YouTube serves thumbnails at a fixed URL per video; mqdefault is 320x180.
         return f"https://i.ytimg.com/vi/{self.video_id}/mqdefault.jpg"
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def is_music(self) -> bool:
+        return is_music_channel(self.channel)
